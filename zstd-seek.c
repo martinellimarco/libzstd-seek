@@ -327,15 +327,30 @@ int ZSTDSeek_seek(ZSTDSeek_Context *sctx, long offset, int origin){
 
         ZSTDSeek_JumpCoordinate new_jc = ZSTDSeek_getJumpCoordinate(sctx, offset);
 
-        ZSTD_DCtx_reset(sctx->dctx, ZSTD_reset_session_only);
+        if(sctx->jc.compressedOffset != new_jc.compressedOffset || offset < sctx->currentUncompressedPos){ //reset
+            ZSTD_DCtx_reset(sctx->dctx, ZSTD_reset_session_only);
 
-        sctx->jc = new_jc;
+            sctx->jc = new_jc;
 
-        sctx->inBuff = sctx->buff + sctx->jc.compressedOffset; //jump to the beginning of the frame..
-        sctx->currentUncompressedPos = offset; //..and adjust the uncompressed position..
-        sctx->tmpOutBuffPos = 0; //..and reset the position in the tmp buffer
-        sctx->input = (ZSTD_inBuffer){sctx->inBuff, 0, 0};
-        sctx->output = (ZSTD_outBuffer){sctx->tmpOutBuff, 0, 0};
+            sctx->inBuff = sctx->buff + sctx->jc.compressedOffset; //jump to the beginning of the frame..
+            sctx->currentUncompressedPos = offset; //..and adjust the uncompressed position..
+            sctx->tmpOutBuffPos = 0; //..and reset the position in the tmp buffer
+            sctx->input = (ZSTD_inBuffer){sctx->inBuff, 0, 0};
+            sctx->output = (ZSTD_outBuffer){sctx->tmpOutBuff, 0, 0};
+
+        }else{ //move forward
+            size_t toSkipTotal = offset - sctx->currentUncompressedPos;
+
+            size_t const buffOutSize = ZSTD_DStreamOutSize();
+            void*  const buffOut = malloc(buffOutSize);
+
+            while(toSkipTotal>0){
+                size_t toSkip = buffOutSize < toSkipTotal ? buffOutSize : toSkipTotal;
+                toSkipTotal -= ZSTDSeek_read(buffOut, toSkip, sctx);
+            }
+
+            free(buffOut);
+        }
     }else{
         DEBUG("Invalid origin\n");
         return -1;
