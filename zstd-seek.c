@@ -5,8 +5,10 @@
  * You can contact the author at :
  * - Source repository : https://github.com/martinellimarco/libzstd-seek
  *
- * This source code is licensed under the GPLv3 (found in the LICENSE
- * file in the root directory of this source tree).
+ * This source code is licensed under both the MIT license (found in the
+ * LICENSE file in the root directory of this source tree) and the GPLv3 (found
+ * in the COPYING file in the root directory of this source tree).
+ * You may select, at your option, one of the above-listed licenses.
 ****************************************************************** */
 
 #include <fcntl.h>
