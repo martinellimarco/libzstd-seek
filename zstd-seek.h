@@ -79,6 +79,17 @@ void ZSTDSeek_addJumpTableRecord(ZSTDSeek_JumpTable* jt, size_t compressedPos, s
  */
 int ZSTDSeek_initializeJumpTable(ZSTDSeek_Context *sctx);
 
+/*
+ * Parse the file and fill the jump table up until a certain uncompressed position. Don't use in combination with addJumpTableRecord.
+ * You don't need to call this unless you used a create*WithoutJumpTable method to get the context.
+ */
+int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUntilPos);
+
+/*
+ * Return 1 if the jump table is fully initialized, 0 otherwise.
+ */
+int ZSTDSeek_jumpTableIsInitialized(ZSTDSeek_Context *sctx);
+
 /* Seek API */
 
 /*
@@ -163,9 +174,14 @@ long ZSTDSeek_tell(ZSTDSeek_Context *sctx);
 long ZSTDSeek_compressedTell(ZSTDSeek_Context *sctx);
 
 /*
- * Return the size of the uncompressed file.
+ * Return the size of the uncompressed file. It will trigger the initialization of the full jump table.
  */
 size_t ZSTDSeek_uncompressedFileSize(ZSTDSeek_Context *sctx);
+
+/*
+ * Return the last known size of the uncompressed file. It's the size of all the uncompressed frames discovered so far stored in the jump table.
+ */
+size_t ZSTDSeek_lastKnownUncompressedFileSize(ZSTDSeek_Context *sctx);
 
 /*
  * Return the file descriptor associated with the memory mapped file if available, -1 otherwise.
