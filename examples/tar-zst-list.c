@@ -22,9 +22,8 @@ void printJumpTable(ZSTDSeek_JumpTable *jt){
     printf("Frame\tCompressed\tUncompressed\n");
     for(uint32_t i = 0; i < jt->length; i++){
         ZSTDSeek_JumpTableRecord r = jt->records[i];
-        printf("%5d\t%10lu\t%12lu\t\n", r.frameIdx, r.compressedPos, r.uncompressedPos);
+        printf("%5d\t%10lu\t%12lu\t\n", i, r.compressedPos, r.uncompressedPos);
     }
-    printf("Uncompressed size: %lu\n", jt->uncompressedFileSize);
     printf("******************\n");
 }
 
