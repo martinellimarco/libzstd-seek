@@ -30,6 +30,8 @@ struct ZSTDSeek_Context_s{
     void *buff; //the start of the buffer with the zstd frame(s)
     size_t size; //the length of buff
 
+    size_t lastFrameCompressedSize; //the size of the last frame processed by read
+
     size_t currentUncompressedPos; //the current position in the uncompressed file, returned by tell
     size_t currentCompressedPos; //the position in the compressed file, returned by compressedTell
 
@@ -282,6 +284,8 @@ ZSTDSeek_Context* ZSTDSeek_createWithoutJumpTable(void *buff, size_t size){
     sctx->currentUncompressedPos = 0;
     sctx->currentCompressedPos = 0;
 
+    sctx->lastFrameCompressedSize = 0;
+
     sctx->jc = (ZSTDSeek_JumpCoordinate){0,0};
 
     sctx->tmpOutBuffSize = ZSTD_DStreamOutSize();
@@ -338,10 +342,9 @@ size_t ZSTDSeek_read(void *outBuff, size_t outBuffSize, ZSTDSeek_Context *sctx){
         }
     }
 
-    int frameCompressedSize;
-    while (toRead > 0 && ((sctx->input.pos < sctx->input.size) || (frameCompressedSize = ZSTD_findFrameCompressedSize(sctx->inBuff, sctx->size)) > 0)){
+    while (toRead > 0 && ((sctx->input.pos < sctx->input.size) || (sctx->lastFrameCompressedSize = ZSTD_findFrameCompressedSize(sctx->inBuff, sctx->size)) > 0)){
         if(sctx->input.pos == sctx->input.size){
-            sctx->input = (ZSTD_inBuffer){sctx->inBuff, (size_t)frameCompressedSize, 0};
+            sctx->input = (ZSTD_inBuffer){sctx->inBuff, sctx->lastFrameCompressedSize, 0};
         }
 
         while (sctx->input.pos < sctx->input.size) {
@@ -375,7 +378,9 @@ size_t ZSTDSeek_read(void *outBuff, size_t outBuffSize, ZSTDSeek_Context *sctx){
             }
         }
 
-        sctx->inBuff+=frameCompressedSize;
+        if(sctx->input.pos == sctx->input.size){ //end of frame
+            sctx->inBuff+=sctx->lastFrameCompressedSize;
+        }
 
         if(toRead == 0){
             break;
