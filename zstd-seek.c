@@ -148,6 +148,7 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
                 lastRet = ZSTD_decompressStream(dctx, &output , &input);
                 if(ZSTD_isError(lastRet)){
                     DEBUG("Error decompressing: %s\n", ZSTD_getErrorName(lastRet));
+                    ZSTD_freeDCtx(dctx);
                     free(buffOut);
                     return -1;
                 }
