@@ -136,6 +136,7 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
         if(ZSTD_isError(frameContentSize)){//true if the uncompressed size is not known
             frameContentSize = 0;
 
+            ZSTD_DCtx *dctx = ZSTD_createDCtx();
             size_t const buffOutSize = ZSTD_DStreamOutSize();
             void*  const buffOut = malloc(buffOutSize);
             size_t lastRet = 0;
@@ -144,7 +145,7 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
             ZSTD_inBuffer input = { buffIn, frameCompressedSize, 0 };
             while (input.pos < input.size) {
                 ZSTD_outBuffer output = { buffOut, buffOutSize, 0 };
-                lastRet = ZSTD_decompressStream(sctx->dctx, &output , &input);
+                lastRet = ZSTD_decompressStream(dctx, &output , &input);
                 if(ZSTD_isError(lastRet)){
                     DEBUG("Error decompressing: %s\n", ZSTD_getErrorName(lastRet));
                     free(buffOut);
@@ -152,7 +153,7 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
                 }
                 frameContentSize += output.pos;
             }
-
+            ZSTD_freeDCtx(dctx);
             free(buffOut);
 
             if (lastRet != 0) {
