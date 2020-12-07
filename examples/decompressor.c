@@ -36,7 +36,7 @@ int main(int argc, const char** argv) {
         return 1;
     }
 
-    ZSTDSeek_Context* sctx = ZSTDSeek_createFromFile(argv[1]);
+    ZSTDSeek_Context* sctx = ZSTDSeek_createFromFileWithoutJumpTable(argv[1]);
     if(!sctx){
         fprintf(stderr, "Can't create the context\n");
         return -1;
