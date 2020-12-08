@@ -398,6 +398,9 @@ int ZSTDSeek_seek(ZSTDSeek_Context *sctx, long offset, int origin){
         return -1;
     }
     if(origin == SEEK_CUR){
+        if(offset==0){
+            return 0;
+        }
         offset = (long)sctx->currentUncompressedPos + offset;
         origin = SEEK_SET;
     }else if(origin == SEEK_END){
