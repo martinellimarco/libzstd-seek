@@ -190,6 +190,16 @@ size_t ZSTDSeek_lastKnownUncompressedFileSize(ZSTDSeek_Context *sctx);
 int ZSTDSeek_fileno(ZSTDSeek_Context *sctx);
 
 /*
+ * Returns the number of frames in the file.
+ */
+size_t ZSTDSeek_getNumberOfFrames(ZSTDSeek_Context *sctx);
+
+/*
+ * Returns 1 if there are more than one frame in the file.
+ */
+int ZSTDSeek_isMultiframe(ZSTDSeek_Context *sctx);
+
+/*
  * Free the context.
  */
 void ZSTDSeek_free(ZSTDSeek_Context *sctx);

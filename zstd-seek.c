@@ -112,7 +112,7 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
      * If so import the seekable format jump table instead of doing the work again.
     */
 
-    int frameCompressedSize;
+    size_t frameCompressedSize;
     size_t compressedPos = 0;
     size_t uncompressedPos = 0;
 
@@ -126,7 +126,7 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
 
     sctx->jumpTableFullyInitialized = 1;
 
-    while ((frameCompressedSize = ZSTD_findFrameCompressedSize(buff, size))>0) {
+    while ((frameCompressedSize = ZSTD_findFrameCompressedSize(buff, size))>0 && !ZSTD_isError(frameCompressedSize)) {
         size_t frameContentSize = ZSTD_getFrameContentSize(buff, size);
 
         if(sctx->jt->length == 0 || sctx->jt->records[sctx->jt->length-1].uncompressedPos < uncompressedPos){
@@ -495,6 +495,38 @@ size_t ZSTDSeek_lastKnownUncompressedFileSize(ZSTDSeek_Context *sctx){
 
 int ZSTDSeek_fileno(ZSTDSeek_Context *sctx){
     return sctx->mmap_fd;
+}
+
+size_t ZSTDSeek_countFramesUpTo(ZSTDSeek_Context *sctx, size_t upTo){
+    if(!sctx){
+        DEBUG("ZSTDSeek_Context is NULL\n");
+        return 0;
+    }
+
+    size_t frameCompressedSize;
+
+    void *buff = sctx->buff;
+    size_t size = sctx->size;
+
+    size_t counter = 0;
+
+    while ((frameCompressedSize = ZSTD_findFrameCompressedSize(buff, size))>0 && !ZSTD_isError(frameCompressedSize)) {
+        counter++;
+        buff += frameCompressedSize;
+        if(counter >= upTo){
+            return upTo;
+        }
+    }
+
+    return counter;
+}
+
+size_t ZSTDSeek_getNumberOfFrames(ZSTDSeek_Context *sctx){
+    return ZSTDSeek_countFramesUpTo(sctx, SIZE_MAX);
+}
+
+int ZSTDSeek_isMultiframe(ZSTDSeek_Context *sctx){
+    return ZSTDSeek_countFramesUpTo(sctx, 2) > 1;
 }
 
 void ZSTDSeek_free(ZSTDSeek_Context *sctx){
