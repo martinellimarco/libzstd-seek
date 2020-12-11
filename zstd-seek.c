@@ -305,6 +305,7 @@ ZSTDSeek_Context* ZSTDSeek_createWithoutJumpTable(void *buff, size_t size){
 
     //test if the buffer starts with a valid frame
     if(ZSTD_isError(ZSTD_findFrameCompressedSize(sctx->buff, sctx->size))){
+        DEBUG("Invalid format\n");
         ZSTDSeek_free(sctx);
         return NULL;
     }
