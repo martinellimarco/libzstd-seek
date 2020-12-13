@@ -169,7 +169,6 @@ long ZSTDSeek_tell(ZSTDSeek_Context *sctx);
 /*
  * Like ftell.
  * Returns the current position in the compressed file or -1 in case of failure.
- * WARNING: The result is only an approximation. It's ok if you want to build a progress bar but don't use it for computation.
  */
 long ZSTDSeek_compressedTell(ZSTDSeek_Context *sctx);
 

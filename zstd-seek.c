@@ -92,8 +92,8 @@ void ZSTDSeek_addJumpTableRecord(ZSTDSeek_JumpTable* jt, size_t compressedPos, s
     }
 
     jt->records[jt->length++] = (ZSTDSeek_JumpTableRecord){
-        compressedPos,
-        uncompressedPos
+            compressedPos,
+            uncompressedPos
     };
 }
 
@@ -329,7 +329,7 @@ size_t ZSTDSeek_read(void *outBuff, size_t outBuffSize, ZSTDSeek_Context *sctx){
         return 0;
     }
 
-    ZSTDSeek_getJumpCoordinate(sctx, sctx->currentUncompressedPos+outBuffSize); //the result is not needed here but it's called to trigger the generation of the jump table, if needed
+    ZSTDSeek_JumpCoordinate localJc = ZSTDSeek_getJumpCoordinate(sctx, sctx->currentUncompressedPos+outBuffSize); //trigger the generation of a jump table record, if needed
 
     size_t maxReadable = ZSTDSeek_lastKnownUncompressedFileSize(sctx) - sctx->currentUncompressedPos;
     size_t toRead = maxReadable < outBuffSize ? maxReadable : outBuffSize;
@@ -366,7 +366,7 @@ size_t ZSTDSeek_read(void *outBuff, size_t outBuffSize, ZSTDSeek_Context *sctx){
                 return ZSTDSEEK_ERR_READ;
             }
 
-            sctx->currentCompressedPos += sctx->input.pos;
+            sctx->currentCompressedPos = localJc.jtr.compressedPos + sctx->input.pos;
 
             if(sctx->jc.uncompressedOffset > sctx->output.pos){
                 sctx->jc.uncompressedOffset -= sctx->output.pos;
