@@ -12,6 +12,8 @@ You then can use `ZSTDSeek_read`, `ZSTDSeek_seek` or `ZSTDSeek_tell` as you plea
 
 In the end remember to free the context with `ZSTDSeek_free`.
 
+This library can now decode the skiptable of the [seekable format](https://github.com/facebook/zstd/blob/dev/contrib/seekable_format/zstd_seekable_compression_format.md).
+
 ## Compile
 
 ```
