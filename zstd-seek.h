@@ -38,6 +38,11 @@ do { \
 #define ZSTDSEEK_ERR_BEYOND_END_SEEK -2
 #define ZSTDSEEK_ERR_READ -3
 
+/* Seekable format constants */
+#define ZSTD_SEEK_TABLE_FOOTER_SIZE 9
+#define ZSTD_SEEKABLE_MAGICNUMBER 0x8F92EAB1
+#define ZSTD_SKIPPABLE_HEADER_SIZE 8
+
 /* Structs */
 
 typedef struct{

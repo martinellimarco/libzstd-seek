@@ -106,11 +106,52 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
         DEBUG("ZSTDSeek_Context is NULL\n");
         return -1;
     }
-    /*
-     * TODO check if the last frame in buff is a skippable frame (magic number 0x184D2A5E).
-     * If so check if it ends with the seekable format magic number 0x8F92EAB1.
-     * If so import the seekable format jump table instead of doing the work again.
-    */
+
+    void *buff = sctx->buff;
+    size_t size = sctx->size;
+
+    void *footer = buff + (size - ZSTD_SEEK_TABLE_FOOTER_SIZE);
+    uint32_t magicnumber = *((uint32_t *)(footer + 5));
+
+    if(magicnumber == ZSTD_SEEKABLE_MAGICNUMBER){
+        DEBUG("Seektable detected\n");
+        uint8_t sfd = *((uint8_t*)(footer + 4));
+        uint8_t checksumFlag = sfd >> 7;
+
+        /* check reserved bits */
+        if((sfd >> 2) & 0x1f){
+            DEBUG("Last frame checksumFlag= %x: Bits 3-7 should be zero. Ignoring malformed seektable.\n",(uint32_t)sfd);
+        }else{
+            uint32_t const numFrames = *((uint32_t *)footer);
+            uint32_t const sizePerEntry = 8 + (checksumFlag ? 4 : 0);
+            uint32_t const tableSize = sizePerEntry * numFrames;
+            uint32_t const frameSize = tableSize + ZSTD_SEEK_TABLE_FOOTER_SIZE + ZSTD_SKIPPABLE_HEADER_SIZE;
+
+            void *frame = buff + (size - frameSize);
+            uint32_t skippableHeader = *((uint32_t *)frame);
+            if(skippableHeader != (ZSTD_MAGIC_SKIPPABLE_START|0xE)){
+                DEBUG("Last frame Header = %u does not match magic number %u. Ignoring malformed seektable.\n", skippableHeader, (ZSTD_MAGIC_SKIPPABLE_START|0xE));
+            }else{
+                uint32_t _frameSize = *((uint32_t *)(frame + 4));
+                if(_frameSize + ZSTD_SKIPPABLE_HEADER_SIZE != frameSize){
+                    DEBUG("Last frame size = %u does not match expected size = %u. Ignoring malformed seektable.\n", _frameSize + ZSTD_SKIPPABLE_HEADER_SIZE, frameSize);
+                }else{
+                    void *table = frame + ZSTD_SKIPPABLE_HEADER_SIZE;
+                    uint32_t cOffset = 0;
+                    uint32_t dOffset = 0;
+                    for(uint32_t i = 0; i < numFrames; i++){
+                        ZSTDSeek_addJumpTableRecord(sctx->jt, cOffset, dOffset);
+                        cOffset += *((uint32_t *)(table + (i * sizePerEntry)));
+                        dOffset += *((uint32_t *)(table + (i * sizePerEntry) + 4));
+                    }
+                    ZSTDSeek_addJumpTableRecord(sctx->jt, cOffset, dOffset);
+
+                    sctx->jumpTableFullyInitialized = 1;
+                    return 0;
+                }
+            }
+        }
+    }
 
     size_t frameCompressedSize;
     size_t compressedPos = 0;
@@ -121,8 +162,7 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
         uncompressedPos = sctx->jt->records[sctx->jt->length-1].uncompressedPos;
     }
 
-    void *buff = sctx->buff + compressedPos;
-    size_t size = sctx->size;
+    buff = sctx->buff + compressedPos;
 
     sctx->jumpTableFullyInitialized = 1;
 
@@ -188,7 +228,7 @@ int ZSTDSeek_jumpTableIsInitialized(ZSTDSeek_Context *sctx){
 }
 
 ZSTDSeek_JumpCoordinate ZSTDSeek_getJumpCoordinate(ZSTDSeek_Context *sctx, size_t uncompressedPos) {
-    if(sctx->jt->length == 0 || sctx->jt->records[sctx->jt->length-1].uncompressedPos < uncompressedPos){
+    if(!sctx->jumpTableFullyInitialized && (sctx->jt->length == 0 || sctx->jt->records[sctx->jt->length-1].uncompressedPos < uncompressedPos)){
         ZSTDSeek_initializeJumpTableUpUntilPos(sctx, uncompressedPos);
     }
 
@@ -197,6 +237,7 @@ ZSTDSeek_JumpCoordinate ZSTDSeek_getJumpCoordinate(ZSTDSeek_Context *sctx, size_
             return (ZSTDSeek_JumpCoordinate){sctx->jt->records[i].compressedPos, uncompressedPos - sctx->jt->records[i].uncompressedPos, sctx->jt->records[i]};
         }
     }
+
     return (ZSTDSeek_JumpCoordinate){0, uncompressedPos, (ZSTDSeek_JumpTableRecord){0, 0}};
 }
 
