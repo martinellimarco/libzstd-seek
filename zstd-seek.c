@@ -369,8 +369,9 @@ size_t ZSTDSeek_read(void *outBuff, size_t outBuffSize, ZSTDSeek_Context *sctx){
         DEBUG("ZSTDSeek_Context is NULL\n");
         return 0;
     }
-
-    ZSTDSeek_JumpCoordinate localJc = ZSTDSeek_getJumpCoordinate(sctx, sctx->currentUncompressedPos+outBuffSize); //trigger the generation of a jump table record, if needed
+    
+    ZSTDSeek_JumpCoordinate localJc = ZSTDSeek_getJumpCoordinate(sctx, sctx->currentUncompressedPos); //trigger the generation of a jump table record, if needed
+    sctx->currentCompressedPos = localJc.jtr.compressedPos;
 
     size_t maxReadable = ZSTDSeek_lastKnownUncompressedFileSize(sctx) - sctx->currentUncompressedPos;
     size_t toRead = maxReadable < outBuffSize ? maxReadable : outBuffSize;
@@ -407,7 +408,7 @@ size_t ZSTDSeek_read(void *outBuff, size_t outBuffSize, ZSTDSeek_Context *sctx){
                 return ZSTDSEEK_ERR_READ;
             }
 
-            sctx->currentCompressedPos = localJc.jtr.compressedPos + sctx->input.pos;
+            sctx->currentCompressedPos += sctx->input.pos;
 
             if(sctx->jc.uncompressedOffset > sctx->output.pos){
                 sctx->jc.uncompressedOffset -= sctx->output.pos;
