@@ -228,16 +228,31 @@ int ZSTDSeek_jumpTableIsInitialized(ZSTDSeek_Context *sctx){
 }
 
 ZSTDSeek_JumpCoordinate ZSTDSeek_getJumpCoordinate(ZSTDSeek_Context *sctx, size_t uncompressedPos) {
-    if(!sctx->jumpTableFullyInitialized && (sctx->jt->length == 0 || sctx->jt->records[sctx->jt->length-1].uncompressedPos < uncompressedPos)){
+    if(!sctx->jumpTableFullyInitialized && (sctx->jt->length == 0 || sctx->jt->records[sctx->jt->length-1].uncompressedPos <= uncompressedPos)){
         ZSTDSeek_initializeJumpTableUpUntilPos(sctx, uncompressedPos);
     }
 
+    //search for the greater value of m where sctx->jt->records[m].uncompressedPos <= uncompressedPos
+    uint32_t l = 0;
+    uint32_t r = sctx->jt->length - 1;
+    while(l <= r){
+        uint32_t m = (l+r)/2;
+        if(sctx->jt->records[m].uncompressedPos > uncompressedPos){
+            r = m-1;
+        }else if((m+1) < sctx->jt->length && sctx->jt->records[m+1].uncompressedPos <= uncompressedPos){
+            l = m+1;
+        }else{
+            return (ZSTDSeek_JumpCoordinate){sctx->jt->records[m].compressedPos, uncompressedPos - sctx->jt->records[m].uncompressedPos, sctx->jt->records[m]};
+        }
+    }
+/*
+    //old linear search
     for(uint32_t i = sctx->jt->length - 1; i >= 0; i--){
         if(sctx->jt->records[i].uncompressedPos <= uncompressedPos){
             return (ZSTDSeek_JumpCoordinate){sctx->jt->records[i].compressedPos, uncompressedPos - sctx->jt->records[i].uncompressedPos, sctx->jt->records[i]};
         }
     }
-
+*/
     return (ZSTDSeek_JumpCoordinate){0, uncompressedPos, (ZSTDSeek_JumpTableRecord){0, 0}};
 }
 
