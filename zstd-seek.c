@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <string.h>
@@ -101,6 +102,25 @@ int ZSTDSeek_initializeJumpTable(ZSTDSeek_Context *sctx){
     return ZSTDSeek_initializeJumpTableUpUntilPos(sctx, SIZE_MAX);
 }
 
+bool ZSTDSeek_isLittleEndian(){
+    volatile int x = 1;
+    return *(char*)(&x) == 1;
+}
+
+uint32_t ZSTDSeek_fromLE32(uint32_t data){
+    if(ZSTDSeek_isLittleEndian()){
+      printf("le\n");
+        return data;
+    }else{
+      printf("be\n");
+        uint32_t swap = ((data & 0xFF000000) >> 24) |
+                        ((data & 0x00FF0000) >> 8)  |
+                        ((data & 0x0000FF00) << 8)  |
+                        ((data & 0x000000FF) << 24);
+        return swap;
+    }
+}
+
 int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUntilPos){
     if(!sctx){
         DEBUG("ZSTDSeek_Context is NULL\n");
@@ -111,7 +131,7 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
     size_t size = sctx->size;
 
     void *footer = buff + (size - ZSTD_SEEK_TABLE_FOOTER_SIZE);
-    uint32_t magicnumber = *((uint32_t *)(footer + 5));
+    uint32_t magicnumber = ZSTDSeek_fromLE32(*((uint32_t *)(footer + 5)));
 
     if(magicnumber == ZSTD_SEEKABLE_MAGICNUMBER){
         DEBUG("Seektable detected\n");
@@ -122,17 +142,17 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
         if((sfd >> 2) & 0x1f){
             DEBUG("Last frame checksumFlag= %x: Bits 3-7 should be zero. Ignoring malformed seektable.\n",(uint32_t)sfd);
         }else{
-            uint32_t const numFrames = *((uint32_t *)footer);
+            uint32_t const numFrames = ZSTDSeek_fromLE32(*((uint32_t *)footer));
             uint32_t const sizePerEntry = 8 + (checksumFlag ? 4 : 0);
             uint32_t const tableSize = sizePerEntry * numFrames;
             uint32_t const frameSize = tableSize + ZSTD_SEEK_TABLE_FOOTER_SIZE + ZSTD_SKIPPABLE_HEADER_SIZE;
 
             void *frame = buff + (size - frameSize);
-            uint32_t skippableHeader = *((uint32_t *)frame);
+            uint32_t skippableHeader = ZSTDSeek_fromLE32(*((uint32_t *)frame));
             if(skippableHeader != (ZSTD_MAGIC_SKIPPABLE_START|0xE)){
                 DEBUG("Last frame Header = %u does not match magic number %u. Ignoring malformed seektable.\n", skippableHeader, (ZSTD_MAGIC_SKIPPABLE_START|0xE));
             }else{
-                uint32_t _frameSize = *((uint32_t *)(frame + 4));
+                uint32_t _frameSize = ZSTDSeek_fromLE32(*((uint32_t *)(frame + 4)));
                 if(_frameSize + ZSTD_SKIPPABLE_HEADER_SIZE != frameSize){
                     DEBUG("Last frame size = %u does not match expected size = %u. Ignoring malformed seektable.\n", _frameSize + ZSTD_SKIPPABLE_HEADER_SIZE, frameSize);
                 }else{
@@ -141,8 +161,8 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
                     uint32_t dOffset = 0;
                     for(uint32_t i = 0; i < numFrames; i++){
                         ZSTDSeek_addJumpTableRecord(sctx->jt, cOffset, dOffset);
-                        cOffset += *((uint32_t *)(table + (i * sizePerEntry)));
-                        dOffset += *((uint32_t *)(table + (i * sizePerEntry) + 4));
+                        cOffset += ZSTDSeek_fromLE32(*((uint32_t *)(table + (i * sizePerEntry))));
+                        dOffset += ZSTDSeek_fromLE32(*((uint32_t *)(table + (i * sizePerEntry) + 4)));
                     }
                     ZSTDSeek_addJumpTableRecord(sctx->jt, cOffset, dOffset);
 
