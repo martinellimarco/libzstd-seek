@@ -6,12 +6,12 @@ pkgrel=1
 pkgdesc="A library that mimic fread, fseek and ftell for reading zstd compressed files."
 arch=('i686' 'x86_64' 'armv7h' 'aarch64')
 url="https://github.com/martinellimarco/libzstd-seek"
-license=('GPLv3' 'MIT')
+license=('GPL3' 'MIT')
 provides=("libzstd-seek")
 depends=('zstd')
 makedepends=('cmake' 'git')
 options=('staticlibs')
-source=("git+https://github.com/martinellimarco/libzstd-seek.git")
+source=("${pkgname}-${pkgver}::git+https://github.com/martinellimarco/libzstd-seek.git#tag=v${pkgver}")
 sha384sums=('SKIP')
 
 build() {
