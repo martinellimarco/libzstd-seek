@@ -185,7 +185,8 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
     sctx->jumpTableFullyInitialized = 1;
 
     while ((frameCompressedSize = ZSTD_findFrameCompressedSize(buff, size))>0 && !ZSTD_isError(frameCompressedSize)) {
-        if(ZSTD_isSkippableFrame(buff, size)){
+        uint32_t const magic = ZSTDSeek_fromLE32(*((uint32_t *)buff));
+        if((magic & ZSTD_MAGIC_SKIPPABLE_MASK) == ZSTD_MAGIC_SKIPPABLE_START){
             compressedPos += frameCompressedSize;
             buff += frameCompressedSize;
             continue;
