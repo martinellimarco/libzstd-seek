@@ -45,7 +45,7 @@ int main(int argc, const char** argv) {
     const char* outFileName = createOutFilename(argv[1]);
     FILE* outF = fopen(outFileName, "wb");
     if(!outF){
-        fprintf(stderr, "Can't open out file %s", outFileName);
+        fprintf(stderr, "Can't open out file %s\n", outFileName);
         return -1;
     }
     printf("Decompressing to %s\n", outFileName);
