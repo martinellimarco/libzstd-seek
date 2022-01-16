@@ -109,10 +109,8 @@ bool ZSTDSeek_isLittleEndian(){
 
 uint32_t ZSTDSeek_fromLE32(uint32_t data){
     if(ZSTDSeek_isLittleEndian()){
-      printf("le\n");
         return data;
     }else{
-      printf("be\n");
         uint32_t swap = ((data & 0xFF000000) >> 24) |
                         ((data & 0x00FF0000) >> 8)  |
                         ((data & 0x0000FF00) << 8)  |
@@ -187,12 +185,17 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
     sctx->jumpTableFullyInitialized = 1;
 
     while ((frameCompressedSize = ZSTD_findFrameCompressedSize(buff, size))>0 && !ZSTD_isError(frameCompressedSize)) {
-        size_t frameContentSize = ZSTD_getFrameContentSize(buff, size);
+        if(ZSTD_isSkippableFrame(buff, size)){
+            compressedPos += frameCompressedSize;
+            buff += frameCompressedSize;
+            continue;
+        }
 
         if(sctx->jt->length == 0 || sctx->jt->records[sctx->jt->length-1].uncompressedPos < uncompressedPos){
             ZSTDSeek_addJumpTableRecord(sctx->jt, compressedPos, uncompressedPos);
         }
 
+        size_t frameContentSize = ZSTD_getFrameContentSize(buff, size);
         if(ZSTD_isError(frameContentSize)){//true if the uncompressed size is not known
             frameContentSize = 0;
 
