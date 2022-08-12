@@ -1,5 +1,5 @@
 [![License](https://img.shields.io/badge/license-GPLv3-green.svg)](https://github.com/martinellimarco/libzstd-seek/blob/main/LICENSE)
-[![AUR version](https://img.shields.io/aur/version/t2sz)](https://aur.archlinux.org/packages/libzstd-seek/)
+[![AUR version](https://img.shields.io/aur/version/libzstd-seek)](https://aur.archlinux.org/packages/libzstd-seek/)
 
 # libzstd-seek
 
