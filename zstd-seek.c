@@ -155,8 +155,8 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
                     DEBUG("Last frame size = %u does not match expected size = %u. Ignoring malformed seektable.\n", _frameSize + ZSTD_SKIPPABLE_HEADER_SIZE, frameSize);
                 }else{
                     void *table = frame + ZSTD_SKIPPABLE_HEADER_SIZE;
-                    uint32_t cOffset = 0;
-                    uint32_t dOffset = 0;
+                    size_t cOffset = 0;
+                    size_t dOffset = 0;
                     for(uint32_t i = 0; i < numFrames; i++){
                         ZSTDSeek_addJumpTableRecord(sctx->jt, cOffset, dOffset);
                         cOffset += ZSTDSeek_fromLE32(*((uint32_t *)(table + (i * sizePerEntry))));
