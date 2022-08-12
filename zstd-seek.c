@@ -88,7 +88,14 @@ void ZSTDSeek_addJumpTableRecord(ZSTDSeek_JumpTable* jt, size_t compressedPos, s
     }
 
     if(jt->length == jt->capacity){
-        jt->capacity *= 2;
+        if(jt->capacity == UINT64_MAX){
+            DEBUG("Jump Table: Maximum capacity reached\n");
+            return;
+        }else if(jt->capacity < (UINT64_MAX>>1)){
+            jt->capacity *= 2;
+        }else{
+            jt->capacity = UINT64_MAX;
+        }
         jt->records = realloc(jt->records, jt->capacity*sizeof(ZSTDSeek_JumpTableRecord));
     }
 
@@ -257,10 +264,10 @@ ZSTDSeek_JumpCoordinate ZSTDSeek_getJumpCoordinate(ZSTDSeek_Context *sctx, size_
     }
 
     //search for the greater value of m where sctx->jt->records[m].uncompressedPos <= uncompressedPos
-    uint32_t l = 0;
-    uint32_t r = sctx->jt->length - 1;
+    uint64_t l = 0;
+    uint64_t r = sctx->jt->length - 1;
     while(l <= r){
-        uint32_t m = (l+r)/2;
+        uint64_t m = (l+r)/2;
         if(sctx->jt->records[m].uncompressedPos > uncompressedPos){
             r = m-1;
         }else if((m+1) < sctx->jt->length && sctx->jt->records[m+1].uncompressedPos <= uncompressedPos){
@@ -271,7 +278,7 @@ ZSTDSeek_JumpCoordinate ZSTDSeek_getJumpCoordinate(ZSTDSeek_Context *sctx, size_
     }
 /*
     //old linear search
-    for(uint32_t i = sctx->jt->length - 1; i >= 0; i--){
+    for(uint64_t i = sctx->jt->length - 1; i >= 0; i--){
         if(sctx->jt->records[i].uncompressedPos <= uncompressedPos){
             return (ZSTDSeek_JumpCoordinate){sctx->jt->records[i].compressedPos, uncompressedPos - sctx->jt->records[i].uncompressedPos, sctx->jt->records[i]};
         }

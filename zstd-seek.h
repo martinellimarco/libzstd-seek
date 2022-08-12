@@ -52,8 +52,8 @@ typedef struct{
 
 typedef struct{
     ZSTDSeek_JumpTableRecord *records;
-    uint32_t length;
-    uint32_t capacity;
+    uint64_t length;
+    uint64_t capacity;
 } ZSTDSeek_JumpTable;
 
 typedef struct ZSTDSeek_Context_s ZSTDSeek_Context;
