@@ -1,3 +1,6 @@
+[![License](https://img.shields.io/badge/license-GPLv3-green.svg)](https://github.com/martinellimarco/libzstd-seek/blob/main/LICENSE)
+[![AUR version](https://img.shields.io/aur/version/t2sz)](https://aur.archlinux.org/packages/libzstd-seek/)
+
 # libzstd-seek
 
 This is a library to read [zstd](https://github.com/facebook/zstd) files at arbitraty positions.
