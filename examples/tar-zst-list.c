@@ -59,7 +59,7 @@ void listFileInTar(ZSTDSeek_Context *sctx){
         header.name[99]=0;//just in case readFromPos returned garbage
         printf("%s - ftell: %ld\n", header.name, ZSTDSeek_tell(sctx));
 
-        size_t blockSize = strtol(header.size, NULL, 8);
+        size_t blockSize = strtoul(header.size, NULL, 8);
         offset += (size_t)((ceil((float)blockSize/512.0)+1)*512);//align to 512 and add the header length
     }while(ret==outBuffSize);
 }
