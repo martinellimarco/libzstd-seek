@@ -139,7 +139,7 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
     void *buff = sctx->buff;
     size_t size = sctx->size;
 
-    void *footer = buff + (size - ZSTD_SEEK_TABLE_FOOTER_SIZE);
+    uint8_t *footer = (uint8_t *)buff + (size - ZSTD_SEEK_TABLE_FOOTER_SIZE);
     uint32_t magicnumber = ZSTDSeek_fromLE32(*((uint32_t *)(footer + 5)));
 
     if(magicnumber == ZSTD_SEEKABLE_MAGICNUMBER){
@@ -156,7 +156,7 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
             uint32_t const tableSize = sizePerEntry * numFrames;
             uint32_t const frameSize = tableSize + ZSTD_SEEK_TABLE_FOOTER_SIZE + ZSTD_SKIPPABLE_HEADER_SIZE;
 
-            void *frame = buff + (size - frameSize);
+            uint8_t *frame = (uint8_t *)buff + (size - frameSize);
             uint32_t skippableHeader = ZSTDSeek_fromLE32(*((uint32_t *)frame));
             if(skippableHeader != (ZSTD_MAGIC_SKIPPABLE_START|0xE)){
                 DEBUG("Last frame Header = %u does not match magic number %u. Ignoring malformed seektable.\n", skippableHeader, (ZSTD_MAGIC_SKIPPABLE_START|0xE));
@@ -165,7 +165,7 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
                 if(_frameSize + ZSTD_SKIPPABLE_HEADER_SIZE != frameSize){
                     DEBUG("Last frame size = %u does not match expected size = %u. Ignoring malformed seektable.\n", _frameSize + ZSTD_SKIPPABLE_HEADER_SIZE, frameSize);
                 }else{
-                    void *table = frame + ZSTD_SKIPPABLE_HEADER_SIZE;
+                    uint8_t *table = frame + ZSTD_SKIPPABLE_HEADER_SIZE;
                     size_t cOffset = 0;
                     size_t dOffset = 0;
                     for(uint32_t i = 0; i < numFrames; i++){
@@ -191,7 +191,7 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
         uncompressedPos = sctx->jt->records[sctx->jt->length-1].uncompressedPos;
     }
 
-    buff = sctx->buff + compressedPos;
+    buff = (uint8_t *)sctx->buff + compressedPos;
 
     sctx->jumpTableFullyInitialized = 1;
 
@@ -199,7 +199,7 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
         uint32_t const magic = ZSTDSeek_fromLE32(*((uint32_t *)buff));
         if((magic & ZSTD_MAGIC_SKIPPABLE_MASK) == ZSTD_MAGIC_SKIPPABLE_START){
             compressedPos += frameCompressedSize;
-            buff += frameCompressedSize;
+            buff = (uint8_t *)buff + frameCompressedSize;
             continue;
         }
 
@@ -240,7 +240,7 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
 
         compressedPos += frameCompressedSize;
         uncompressedPos += frameContentSize;
-        buff += frameCompressedSize;
+        buff = (uint8_t *)buff + frameCompressedSize;
 
         if(uncompressedPos >= upUntilPos){
             sctx->jumpTableFullyInitialized = 0;
@@ -436,7 +436,7 @@ size_t ZSTDSeek_read(void *outBuff, size_t outBuffSize, ZSTDSeek_Context *sctx){
 
             memcpy(outBuff, sctx->tmpOutBuff+sctx->tmpOutBuffPos+sctx->jc.uncompressedOffset, toCopy);
             toRead -= toCopy;
-            outBuff += toCopy;
+            outBuff = (uint8_t *)outBuff + toCopy;
             sctx->currentUncompressedPos += toCopy;
             sctx->tmpOutBuffPos += toCopy + sctx->jc.uncompressedOffset;
             sctx->jc.uncompressedOffset = 0;
@@ -468,7 +468,7 @@ size_t ZSTDSeek_read(void *outBuff, size_t outBuffSize, ZSTDSeek_Context *sctx){
 
                 memcpy(outBuff, sctx->tmpOutBuff+sctx->tmpOutBuffPos+sctx->jc.uncompressedOffset, toCopy);
                 toRead -= toCopy;
-                outBuff += toCopy;
+                outBuff = (uint8_t *)outBuff + toCopy;
                 sctx->currentUncompressedPos += toCopy;
                 sctx->tmpOutBuffPos += toCopy + sctx->jc.uncompressedOffset;
                 sctx->jc.uncompressedOffset = 0;
@@ -529,7 +529,7 @@ int ZSTDSeek_seek(ZSTDSeek_Context *sctx, long offset, int origin){
 
             sctx->jc = new_jc;
 
-            sctx->inBuff = sctx->buff + sctx->jc.compressedOffset; //jump to the beginning of the frame..
+            sctx->inBuff = (uint8_t *)sctx->buff + sctx->jc.compressedOffset; //jump to the beginning of the frame..
             sctx->currentUncompressedPos = offset; //..and adjust the uncompressed position..
             sctx->currentCompressedPos = sctx->jc.compressedOffset;
             sctx->tmpOutBuffPos = 0; //..and reset the position in the tmp buffer
@@ -614,7 +614,7 @@ size_t ZSTDSeek_countFramesUpTo(ZSTDSeek_Context *sctx, size_t upTo){
 
     while ((frameCompressedSize = ZSTD_findFrameCompressedSize(buff, size))>0 && !ZSTD_isError(frameCompressedSize)) {
         counter++;
-        buff += frameCompressedSize;
+        buff = (uint8_t *)buff + frameCompressedSize;
         if(counter >= upTo){
             return upTo;
         }
