@@ -10,7 +10,11 @@
 ****************************************************************** */
 
 #include <fcntl.h>
+
+#ifndef _WIN32
 #include <unistd.h>
+#endif
+
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
