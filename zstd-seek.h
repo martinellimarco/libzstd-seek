@@ -23,6 +23,9 @@ extern "C" {
 #define _ZSTD_SEEK_DEBUG_ 0
 #endif
 
+#ifdef _WIN32
+#define DEBUG(...)
+#else
 #define DEBUG(...) \
 do { \
     if (_ZSTD_SEEK_DEBUG_){ \
@@ -32,6 +35,7 @@ do { \
         funlockfile(stderr); \
     } \
 } while (0)
+#endif
 
 /* Error constants */
 #define ZSTDSEEK_ERR_NEGATIVE_SEEK -1
