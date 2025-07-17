@@ -31,6 +31,16 @@ If you want to get debug messages then `#define _ZSTD_SEEK_DEBUG_ 1`
 
 Tests are in a separate project, [libzstd-seek-tests](https://github.com/martinellimarco/libzstd-seek-tests).
 
+## How does it work?
+
+The `ZSTDSeek_Context` holds a jump table that can be used for constant-time random access at zstd frame granularity (frames can be decompressed individually without inter-dependency).
+`ZSTDSeek_initializeJumpTable` produces the jump table by:
+* First, look for and validating a skiptable of the seekable format. If it looks good, it is used directly.
+* If there is no such skiptable or if it is malformed (e.g. does not match the size of the file), we try to use `ZSTD_getFrameContentSize` to build a jump table in linear time (relative to the number of frames).
+* If `ZSTD_getFrameContentSize` fails (happens when the optional "decompressed size" field of a frame is not set), we have to decompress the frame and find the size ourselves. This will be slow.
+
+If you use the more advanced APIs you can fill in the jump table yourself or only request that the jump table be filled up to a target decompressed size when the skiptable is not present.
+
 ## Licensing
 
 This source code is licensed under both the MIT license (found in the LICENSE file) and the GPLv3 (found in the COPYING file).
