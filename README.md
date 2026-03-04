@@ -27,9 +27,31 @@ make
 
 If you want to get debug messages then `#define _ZSTD_SEEK_DEBUG_ 1`
 
-## Tests
+## Testing
 
-Tests are in a separate project, [libzstd-seek-tests](https://github.com/martinellimarco/libzstd-seek-tests).
+The test suite (~50 tests) is built into the project and covers correctness,
+seek accuracy, memory safety (ASAN + UBSAN), and code coverage (LLVM).
+
+```bash
+cmake -B build -DBUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
+cmake --build build
+cd build && ctest --output-on-failure
+```
+
+See [TESTING.md](TESTING.md) for full documentation (build configurations,
+test categories, coverage results).
+
+## Fuzzing
+
+Two [libFuzzer](https://llvm.org/docs/LibFuzzer.html) harnesses exercise the
+decompression and seekable format parsing code paths.
+
+See [FUZZING.md](FUZZING.md) for setup and usage instructions.
+
+## Legacy tests
+
+The original test suite is in a separate project,
+[libzstd-seek-tests](https://github.com/martinellimarco/libzstd-seek-tests).
 
 ## How does it work?
 

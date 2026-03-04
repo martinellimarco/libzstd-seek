@@ -17,6 +17,7 @@ extern "C" {
 #endif
 
 #include <stdio.h>
+#include <stdint.h>
 #include <zstd.h>
 
 #ifndef _ZSTD_SEEK_DEBUG_
