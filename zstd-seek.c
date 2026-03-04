@@ -472,7 +472,8 @@ size_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context *
     const ZSTDSeek_JumpCoordinate localJc = ZSTDSeek_getJumpCoordinate(sctx, sctx->currentUncompressedPos); //trigger the generation of a jump table record, if needed
     sctx->currentCompressedPos = localJc.jtr.compressedPos;
 
-    const size_t maxReadable = ZSTDSeek_lastKnownUncompressedFileSize(sctx) - sctx->currentUncompressedPos;
+    const size_t lastKnown = ZSTDSeek_lastKnownUncompressedFileSize(sctx);
+    const size_t maxReadable = (lastKnown > sctx->currentUncompressedPos) ? lastKnown - sctx->currentUncompressedPos : 0;
     size_t toRead = maxReadable < outBuffSize ? maxReadable : outBuffSize;
     const size_t shouldRead = toRead;
 
