@@ -88,7 +88,6 @@ ZSTDSeek_JumpTable* ZSTDSeek_newJumpTable(){
 
 void ZSTDSeek_freeJumpTable(ZSTDSeek_JumpTable* jt){
     if(!jt){
-        DEBUG("Invalid argument");
         return;
     }
     free(jt->records);
