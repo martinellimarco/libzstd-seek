@@ -818,9 +818,11 @@ void ZSTDSeek_free(ZSTDSeek_Context *sctx){
 
     ZSTDSeek_freeJumpTable(sctx->jt);
 
-    if(sctx->mmap_fd>=0 && sctx->close_fd){
+    if(sctx->mmap_fd >= 0){
         munmap(sctx->buff, sctx->size);
-        close(sctx->mmap_fd);
+        if(sctx->close_fd){
+            close(sctx->mmap_fd);
+        }
     }
 
     free(sctx->tmpOutBuff);
