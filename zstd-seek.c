@@ -361,12 +361,16 @@ ZSTDSeek_JumpCoordinate ZSTDSeek_getJumpCoordinate(ZSTDSeek_Context *sctx, const
 /* Seek API */
 
 ZSTDSeek_Context* ZSTDSeek_createFromFileWithoutJumpTable(const char* file){
-    struct stat st;
-    stat(file, &st);
-
     const int fd = open(file, O_RDONLY, 0);
     if(fd < 0){
         DEBUG("Unable to open '%s'\n", file);
+        return NULL;
+    }
+
+    struct stat st;
+    if(fstat(fd, &st) != 0 || st.st_size < 0){
+        DEBUG("Unable to stat '%s'\n", file);
+        close(fd);
         return NULL;
     }
 
