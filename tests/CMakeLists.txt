@@ -154,6 +154,11 @@ add_api_test(api_frame_count              frame_count)
 add_api_test(api_is_multiframe            is_multiframe)
 add_api_test(api_fileno                   fileno_check)
 add_api_test(api_compressed_tell          compressed_tell)
+add_api_test(api_compressed_tell_mono    compressed_tell_monotonic)
+add_api_test(api_compressed_tell_seek    compressed_tell_seek)
+
+# ── API: seek (large forward) ────────────────────────────────────────────────
+add_api_test(api_seek_forward_large      seek_forward_large)
 
 # ── API: read patterns ───────────────────────────────────────────────────────
 add_api_test(api_read_byte_by_byte        read_byte_by_byte)
@@ -215,6 +220,8 @@ foreach(tname
     api_seekable_malformed
     api_file_size api_last_known_size api_frame_count
     api_is_multiframe api_fileno api_compressed_tell
+    api_compressed_tell_mono api_compressed_tell_seek
+    api_seek_forward_large
     api_read_byte_by_byte api_read_chunks
     api_frame_boundary api_single_frame api_large_read
     api_read_too_much

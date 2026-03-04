@@ -320,6 +320,32 @@ case "$TEST_NAME" in
         log_pass "$TEST_NAME"
         ;;
 
+    # ── compressedTell coverage tests ──────────────────────────────────────
+    compressed_tell_monotonic)
+        gen_multiframe
+        log_step "$TEST_NAME (10-byte chunks, monotonicity)"
+        run "$TEST_SEEK" "$TEST_NAME" "$WORK_DIR/multi.zst"
+        assert_rc 0 || exit 1
+        log_pass "$TEST_NAME"
+        ;;
+
+    compressed_tell_seek)
+        gen_multiframe
+        log_step "$TEST_NAME (JT boundary coherence)"
+        run "$TEST_SEEK" "$TEST_NAME" "$WORK_DIR/multi.zst"
+        assert_rc 0 || exit 1
+        log_pass "$TEST_NAME"
+        ;;
+
+    # ── Large forward seek test ────────────────────────────────────────────
+    seek_forward_large)
+        gen_multiframe
+        log_step "$TEST_NAME (+500 SEEK_CUR within frames)"
+        run "$TEST_SEEK" "$TEST_NAME" "$WORK_DIR/multi.zst" "$WORK_DIR/multi.raw"
+        assert_rc 0 || exit 1
+        log_pass "$TEST_NAME"
+        ;;
+
     *)
         echo "Unknown test: $TEST_NAME" >&2
         exit 1

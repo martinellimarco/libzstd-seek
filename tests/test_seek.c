@@ -831,6 +831,217 @@ static int test_compressed_tell(int argc, char *argv[]) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+ * Test: compressed_tell_monotonic <zst_path>
+ * Read in small chunks and verify compressedTell() never goes backwards.
+ * Catches the pre-fix bug where compressedTell reset to frame start
+ * when serving data from the tmpOutBuff cache.
+ * ══════════════════════════════════════════════════════════════════════════*/
+static int test_compressed_tell_monotonic(int argc, char *argv[]) {
+    if (argc < 1) { FAIL("usage: compressed_tell_monotonic <zst>"); return 1; }
+
+    ZSTDSeek_Context *ctx = ZSTDSeek_createFromFile(argv[0]);
+    if (!ctx) { FAIL("createFromFile failed"); return 1; }
+
+    long prev_ct = 0;
+    size_t total_read = 0;
+    size_t reads = 0;
+    uint8_t buf[10];
+    size_t n;
+
+    while ((n = ZSTDSeek_read(buf, sizeof(buf), ctx)) > 0) {
+        total_read += n;
+        reads++;
+        long ct = ZSTDSeek_compressedTell(ctx);
+        if (ct < prev_ct) {
+            FAIL("compressedTell went backwards: %ld -> %ld after read #%zu (total_read=%zu)",
+                 prev_ct, ct, reads, total_read);
+            ZSTDSeek_free(ctx);
+            return 1;
+        }
+        prev_ct = ct;
+    }
+
+    if (prev_ct <= 0) {
+        FAIL("compressedTell never advanced (final=%ld, total_read=%zu)", prev_ct, total_read);
+        ZSTDSeek_free(ctx);
+        return 1;
+    }
+
+    PASS("compressed_tell_monotonic: %zu reads, %zu bytes, final compressedTell=%ld",
+         reads, total_read, prev_ct);
+    ZSTDSeek_free(ctx);
+    return 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Test: compressed_tell_seek <zst_path>
+ * Verify compressedTell() matches jump table at frame boundaries after
+ * seek, and remains monotonic during sequential read-through.
+ * ══════════════════════════════════════════════════════════════════════════*/
+static int test_compressed_tell_seek(int argc, char *argv[]) {
+    if (argc < 1) { FAIL("usage: compressed_tell_seek <zst>"); return 1; }
+
+    ZSTDSeek_Context *ctx = ZSTDSeek_createFromFile(argv[0]);
+    if (!ctx) { FAIL("createFromFile failed"); return 1; }
+
+    ZSTDSeek_JumpTable *jt = ZSTDSeek_getJumpTableOfContext(ctx);
+    if (!jt || jt->length < 3) {
+        FAIL("need at least 2 frames (got %llu records)", jt ? (unsigned long long)jt->length : 0);
+        ZSTDSeek_free(ctx);
+        return 1;
+    }
+
+    /* Part 1: Seek to each frame boundary and check compressedTell matches JT */
+    for (uint64_t i = 0; i + 1 < jt->length; i++) {
+        size_t uncomp_pos = jt->records[i].uncompressedPos;
+        size_t comp_pos   = jt->records[i].compressedPos;
+
+        int rc = ZSTDSeek_seek(ctx, (long)uncomp_pos, SEEK_SET);
+        if (rc != 0) {
+            FAIL("seek to frame %llu (uncomp=%zu) failed: %d", (unsigned long long)i, uncomp_pos, rc);
+            ZSTDSeek_free(ctx);
+            return 1;
+        }
+
+        long ct = ZSTDSeek_compressedTell(ctx);
+        if ((size_t)ct != comp_pos) {
+            FAIL("frame %llu: after seek, compressedTell=%ld expected=%zu",
+                 (unsigned long long)i, ct, comp_pos);
+            ZSTDSeek_free(ctx);
+            return 1;
+        }
+
+        /* Read 1 byte — compressedTell must not go below frame start */
+        uint8_t byte;
+        size_t n = ZSTDSeek_read(&byte, 1, ctx);
+        if (n != 1) {
+            FAIL("frame %llu: read returned %zu", (unsigned long long)i, n);
+            ZSTDSeek_free(ctx);
+            return 1;
+        }
+        long ct2 = ZSTDSeek_compressedTell(ctx);
+        if (ct2 < ct) {
+            FAIL("frame %llu: compressedTell went backwards after read: %ld -> %ld",
+                 (unsigned long long)i, ct, ct2);
+            ZSTDSeek_free(ctx);
+            return 1;
+        }
+    }
+
+    /* Part 2: Seek back to start, verify compressedTell == 0 */
+    int rc = ZSTDSeek_seek(ctx, 0, SEEK_SET);
+    if (rc != 0) { FAIL("seek(0, SEEK_SET) failed"); ZSTDSeek_free(ctx); return 1; }
+
+    long ct_start = ZSTDSeek_compressedTell(ctx);
+    if (ct_start != 0) {
+        FAIL("after seek(0), compressedTell=%ld expected=0", ct_start);
+        ZSTDSeek_free(ctx);
+        return 1;
+    }
+
+    /* Part 3: Sequential read-through, verify monotonic */
+    long prev_ct = 0;
+    uint8_t buf[10];
+    size_t n;
+    while ((n = ZSTDSeek_read(buf, sizeof(buf), ctx)) > 0) {
+        long ct = ZSTDSeek_compressedTell(ctx);
+        if (ct < prev_ct) {
+            FAIL("sequential pass: compressedTell went backwards: %ld -> %ld", prev_ct, ct);
+            ZSTDSeek_free(ctx);
+            return 1;
+        }
+        prev_ct = ct;
+    }
+
+    PASS("compressed_tell_seek: %llu frames verified, sequential monotonic OK",
+         (unsigned long long)(jt->length - 1));
+    ZSTDSeek_free(ctx);
+    return 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Test: seek_forward_large <zst_path> <raw_path>
+ * Perform large SEEK_CUR forwards within frames and verify data against
+ * the raw reference.  Exercises the discard loop with bigger skips than
+ * the existing seek_cur_forward test (which uses 1-byte hops).
+ * ══════════════════════════════════════════════════════════════════════════*/
+static int test_seek_forward_large(int argc, char *argv[]) {
+    if (argc < 2) { FAIL("usage: seek_forward_large <zst> <raw>"); return 1; }
+
+    size_t raw_size;
+    uint8_t *raw = read_file(argv[1], &raw_size);
+    if (!raw) { FAIL("cannot read raw file"); return 1; }
+
+    ZSTDSeek_Context *ctx = ZSTDSeek_createFromFile(argv[0]);
+    if (!ctx) { FAIL("createFromFile failed"); free(raw); return 1; }
+
+    ZSTDSeek_JumpTable *jt = ZSTDSeek_getJumpTableOfContext(ctx);
+    if (!jt || jt->length < 2) {
+        FAIL("need at least 1 frame");
+        ZSTDSeek_free(ctx); free(raw); return 1;
+    }
+
+    int tested = 0;
+    for (uint64_t i = 0; i + 1 < jt->length; i++) {
+        size_t frame_start = jt->records[i].uncompressedPos;
+        size_t frame_end   = jt->records[i + 1].uncompressedPos;
+        size_t frame_size  = frame_end - frame_start;
+
+        /* Only test frames large enough for a 500-byte skip + bookend reads */
+        if (frame_size < 502) continue;
+
+        /* Seek to frame start, read 1 byte, verify */
+        int rc = ZSTDSeek_seek(ctx, (long)frame_start, SEEK_SET);
+        if (rc != 0) {
+            FAIL("seek to frame %llu start (%zu) failed", (unsigned long long)i, frame_start);
+            ZSTDSeek_free(ctx); free(raw); return 1;
+        }
+
+        uint8_t byte;
+        size_t n = ZSTDSeek_read(&byte, 1, ctx);
+        if (n != 1 || byte != raw[frame_start]) {
+            FAIL("frame %llu: first byte mismatch (got 0x%02x expected 0x%02x)",
+                 (unsigned long long)i, byte, raw[frame_start]);
+            ZSTDSeek_free(ctx); free(raw); return 1;
+        }
+
+        /* SEEK_CUR +500, verify tell */
+        rc = ZSTDSeek_seek(ctx, 500, SEEK_CUR);
+        if (rc != 0) {
+            FAIL("frame %llu: seek(+500, SEEK_CUR) failed", (unsigned long long)i);
+            ZSTDSeek_free(ctx); free(raw); return 1;
+        }
+
+        long pos = ZSTDSeek_tell(ctx);
+        long expected_pos = (long)(frame_start + 501);
+        if (pos != expected_pos) {
+            FAIL("frame %llu: after skip, tell=%ld expected=%ld",
+                 (unsigned long long)i, pos, expected_pos);
+            ZSTDSeek_free(ctx); free(raw); return 1;
+        }
+
+        /* Read 1 byte after skip, verify against raw */
+        n = ZSTDSeek_read(&byte, 1, ctx);
+        if (n != 1 || byte != raw[frame_start + 501]) {
+            FAIL("frame %llu: byte after skip mismatch (got 0x%02x expected 0x%02x)",
+                 (unsigned long long)i, byte, raw[frame_start + 501]);
+            ZSTDSeek_free(ctx); free(raw); return 1;
+        }
+
+        tested++;
+    }
+
+    if (tested == 0) {
+        FAIL("no frames >= 502 bytes found");
+        ZSTDSeek_free(ctx); free(raw); return 1;
+    }
+
+    PASS("seek_forward_large: tested %d frames with +500 skip", tested);
+    ZSTDSeek_free(ctx); free(raw);
+    return 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
  * Test: frame_boundary <zst_path> <raw_path>
  * Read across a frame boundary.
  * ══════════════════════════════════════════════════════════════════════════*/
@@ -1767,6 +1978,10 @@ static const TestEntry tests[] = {
     { "frame_count",            test_frame_count },
     { "is_multiframe",          test_is_multiframe },
     { "compressed_tell",        test_compressed_tell },
+    { "compressed_tell_monotonic", test_compressed_tell_monotonic },
+    { "compressed_tell_seek",   test_compressed_tell_seek },
+    /* Seek (large) */
+    { "seek_forward_large",     test_seek_forward_large },
     /* Edge cases */
     { "frame_boundary",         test_frame_boundary },
     { "read_too_much",          test_read_too_much },
