@@ -496,6 +496,7 @@ size_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context *
         while(sctx->input.pos < sctx->input.size){
             sctx->output = (ZSTD_outBuffer){ sctx->tmpOutBuff, sctx->tmpOutBuffSize, 0 };
             sctx->tmpOutBuffPos = 0;
+            const size_t prevInPos = sctx->input.pos;
             const size_t ret = ZSTD_decompressStream(sctx->dctx, &sctx->output , &sctx->input);
 
             if(ZSTD_isError(ret)){
@@ -503,7 +504,7 @@ size_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context *
                 return 0;
             }
 
-            sctx->currentCompressedPos += sctx->input.pos;
+            sctx->currentCompressedPos += sctx->input.pos - prevInPos;
 
             if(sctx->jc.uncompressedOffset > sctx->output.pos){
                 sctx->jc.uncompressedOffset -= sctx->output.pos;
