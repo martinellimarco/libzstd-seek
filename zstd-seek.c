@@ -239,14 +239,13 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const size_t 
     }
     size -= compressedPos; /* size now tracks remaining bytes from buff onwards */
 
-    sctx->jumpTableFullyInitialized = 1;
-
     /* Probe DCtx and buffer for frames without content-size.
      * Allocated lazily on first need, reused across frames. */
     ZSTD_DCtx *probeDctx = NULL;
     void *probeBuff = NULL;
     size_t probeBuffSize = 0;
     int result = -1;
+    int reachedTarget = 0;
 
     while (size > 0 && (frameCompressedSize = ZSTD_findFrameCompressedSize(buff, size))>0 && !ZSTD_isError(frameCompressedSize)) {
         const uint32_t magic = load_le32(buff);
@@ -302,13 +301,16 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const size_t 
         size -= frameCompressedSize;
 
         if(uncompressedPos >= upUntilPos){
-            sctx->jumpTableFullyInitialized = 0;
+            reachedTarget = 1;
             break;
         }
     }
     if(sctx->jt->length > 0){
         if(sctx->jt->records[sctx->jt->length-1].uncompressedPos < uncompressedPos){
             ZSTDSeek_addJumpTableRecord(sctx->jt, compressedPos, uncompressedPos);
+        }
+        if(!reachedTarget){
+            sctx->jumpTableFullyInitialized = 1;
         }
         result = 0;
     }else{ //0 frames found
