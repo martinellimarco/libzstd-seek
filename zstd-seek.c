@@ -551,6 +551,16 @@ size_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context *
             if(ZSTD_isError(sctx->lastFrameCompressedSize) || sctx->lastFrameCompressedSize == 0){
                 break;
             }
+
+            /* Skip skippable frames (e.g. seekable format footer) without
+             * passing them to the decompressor. */
+            const uint32_t magic = load_le32(sctx->inBuff);
+            if((magic & ZSTD_MAGIC_SKIPPABLE_MASK) == ZSTD_MAGIC_SKIPPABLE_START){
+                sctx->currentCompressedPos += sctx->lastFrameCompressedSize;
+                sctx->inBuff += sctx->lastFrameCompressedSize;
+                continue;
+            }
+
             sctx->input = (ZSTD_inBuffer){sctx->inBuff, sctx->lastFrameCompressedSize, 0};
         }
 
