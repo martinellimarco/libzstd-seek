@@ -363,7 +363,9 @@ int ZSTDSeek_jumpTableIsInitialized(const ZSTDSeek_Context *sctx){
 
 ZSTDSeek_JumpCoordinate ZSTDSeek_getJumpCoordinate(ZSTDSeek_Context *sctx, const size_t uncompressedPos) {
     if(!sctx->jumpTableFullyInitialized && (sctx->jt->length == 0 || sctx->jt->records[sctx->jt->length-1].uncompressedPos <= uncompressedPos)){
-        ZSTDSeek_initializeJumpTableUpUntilPos(sctx, uncompressedPos);
+        if(ZSTDSeek_initializeJumpTableUpUntilPos(sctx, uncompressedPos) != 0){
+            DEBUG("Jump table init failed for pos %zu, using partial table\n", uncompressedPos);
+        }
     }
 
     //search for the greater value of m where sctx->jt->records[m].uncompressedPos <= uncompressedPos
