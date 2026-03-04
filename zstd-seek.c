@@ -500,7 +500,7 @@ size_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context *
 
             if(ZSTD_isError(ret)){
                 DEBUG("Error decompressing: %s\n", ZSTD_getErrorName(ret));
-                return ZSTDSEEK_ERR_READ;
+                return 0;
             }
 
             sctx->currentCompressedPos += sctx->input.pos;
