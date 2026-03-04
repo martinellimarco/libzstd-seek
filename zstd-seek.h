@@ -46,7 +46,6 @@ do { \
  */
 #define ZSTDSEEK_ERR_NEGATIVE_SEEK (-1)
 #define ZSTDSEEK_ERR_BEYOND_END_SEEK (-2)
-#define ZSTDSEEK_ERR_READ (-3)
 /** @} */
 
 /** @name Seekable format constants
