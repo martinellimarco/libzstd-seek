@@ -71,8 +71,15 @@ ZSTDSeek_JumpTable* ZSTDSeek_getJumpTableOfContext(ZSTDSeek_Context *sctx){
 
 ZSTDSeek_JumpTable* ZSTDSeek_newJumpTable(){
     ZSTDSeek_JumpTable *jt = malloc(sizeof(ZSTDSeek_JumpTable));
+    if(!jt){
+        return NULL;
+    }
 
     jt->records = malloc(sizeof(ZSTDSeek_JumpTableRecord));
+    if(!jt->records){
+        free(jt);
+        return NULL;
+    }
     jt->length = 0;
     jt->capacity = 1;
 
@@ -413,8 +420,15 @@ ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptor(const int fd){
 
 ZSTDSeek_Context* ZSTDSeek_createWithoutJumpTable(void *buff, const size_t size){
     ZSTD_DCtx *dctx = ZSTD_createDCtx();
+    if(!dctx){
+        return NULL;
+    }
 
     ZSTDSeek_Context* sctx = malloc(sizeof(ZSTDSeek_Context));
+    if(!sctx){
+        ZSTD_freeDCtx(dctx);
+        return NULL;
+    }
 
     sctx->dctx = dctx;
 
@@ -432,6 +446,11 @@ ZSTDSeek_Context* ZSTDSeek_createWithoutJumpTable(void *buff, const size_t size)
 
     sctx->tmpOutBuffSize = ZSTD_DStreamOutSize();
     sctx->tmpOutBuff = (uint8_t*)malloc(sctx->tmpOutBuffSize);
+    if(!sctx->tmpOutBuff){
+        ZSTD_freeDCtx(dctx);
+        free(sctx);
+        return NULL;
+    }
     sctx->tmpOutBuffPos = 0;
 
     sctx->mmap_fd = -1;
@@ -441,6 +460,12 @@ ZSTDSeek_Context* ZSTDSeek_createWithoutJumpTable(void *buff, const size_t size)
     sctx->output = (ZSTD_outBuffer){sctx->tmpOutBuff, 0, 0};
 
     sctx->jt = ZSTDSeek_newJumpTable();
+    if(!sctx->jt){
+        ZSTD_freeDCtx(dctx);
+        free(sctx->tmpOutBuff);
+        free(sctx);
+        return NULL;
+    }
     sctx->jumpTableFullyInitialized = 0;
 
     //test if the buffer starts with a valid frame
