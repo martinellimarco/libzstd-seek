@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later OR MIT
+
 /* ******************************************************************
  * libzstd-seek
  * Copyright (c) 2020, Martinelli Marco
@@ -5,8 +7,8 @@
  * You can contact the author at :
  * - Source repository : https://github.com/martinellimarco/libzstd-seek
  *
- * This source code is licensed under the GPLv3 (found in the LICENSE
- * file in the root directory of this source tree).
+ * This source code is licensed under both the MIT license (found in
+ * the LICENSE file) and the GPLv3 (found in the COPYING file).
 ****************************************************************** */
 
 #ifndef _ZSTD_SEEK_
