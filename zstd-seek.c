@@ -241,6 +241,13 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const size_t 
 
     sctx->jumpTableFullyInitialized = 1;
 
+    /* Probe DCtx and buffer for frames without content-size.
+     * Allocated lazily on first need, reused across frames. */
+    ZSTD_DCtx *probeDctx = NULL;
+    void *probeBuff = NULL;
+    size_t probeBuffSize = 0;
+    int result = -1;
+
     while (size > 0 && (frameCompressedSize = ZSTD_findFrameCompressedSize(buff, size))>0 && !ZSTD_isError(frameCompressedSize)) {
         const uint32_t magic = load_le32(buff);
         if((magic & ZSTD_MAGIC_SKIPPABLE_MASK) == ZSTD_MAGIC_SKIPPABLE_START){
@@ -258,30 +265,34 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const size_t 
         if(ZSTD_isError(frameContentSize)){//true if the uncompressed size is not known
             frameContentSize = 0;
 
-            ZSTD_DCtx *dctx = ZSTD_createDCtx();
-            const size_t buffOutSize = ZSTD_DStreamOutSize();
-            void* buffOut = malloc(buffOutSize);
-            size_t lastRet = 0;
-            void *buffIn = buff;
+            /* Lazy init: allocate probe resources on first unknown-size frame */
+            if(!probeDctx){
+                probeDctx = ZSTD_createDCtx();
+                probeBuffSize = ZSTD_DStreamOutSize();
+                probeBuff = malloc(probeBuffSize);
+                if(!probeDctx || !probeBuff){
+                    DEBUG("Unable to allocate probe resources\n");
+                    goto cleanup;
+                }
+            }else{
+                ZSTD_DCtx_reset(probeDctx, ZSTD_reset_session_only);
+            }
 
-            ZSTD_inBuffer input = { buffIn, frameCompressedSize, 0 };
+            size_t lastRet = 0;
+            ZSTD_inBuffer input = { buff, frameCompressedSize, 0 };
             while (input.pos < input.size) {
-                ZSTD_outBuffer output = { buffOut, buffOutSize, 0 };
-                lastRet = ZSTD_decompressStream(dctx, &output , &input);
+                ZSTD_outBuffer output = { probeBuff, probeBuffSize, 0 };
+                lastRet = ZSTD_decompressStream(probeDctx, &output , &input);
                 if(ZSTD_isError(lastRet)){
                     DEBUG("Error decompressing: %s\n", ZSTD_getErrorName(lastRet));
-                    ZSTD_freeDCtx(dctx);
-                    free(buffOut);
-                    return -1;
+                    goto cleanup;
                 }
                 frameContentSize += output.pos;
             }
-            ZSTD_freeDCtx(dctx);
-            free(buffOut);
 
             if (lastRet != 0) {
                 DEBUG("Unexpected EOF. Is the file truncated?\n");
-                return -1;
+                goto cleanup;
             }
         }
 
@@ -299,11 +310,15 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const size_t 
         if(sctx->jt->records[sctx->jt->length-1].uncompressedPos < uncompressedPos){
             ZSTDSeek_addJumpTableRecord(sctx->jt, compressedPos, uncompressedPos);
         }
-        return 0;
+        result = 0;
     }else{ //0 frames found
         DEBUG("No frames\n");
-        return -1;
     }
+
+cleanup:
+    ZSTD_freeDCtx(probeDctx);
+    free(probeBuff);
+    return result;
 }
 
 int ZSTDSeek_jumpTableIsInitialized(const ZSTDSeek_Context *sctx){
