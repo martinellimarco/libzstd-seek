@@ -140,6 +140,15 @@ uint32_t ZSTDSeek_fromLE32(const uint32_t data){
     }
 }
 
+/* Safe unaligned load: read a little-endian uint32_t from a possibly
+ * unaligned pointer via memcpy (well-defined in C99, unlike casting
+ * to uint32_t*). */
+static uint32_t load_le32(const void *ptr){
+    uint32_t val;
+    memcpy(&val, ptr, sizeof(val));
+    return ZSTDSeek_fromLE32(val);
+}
+
 int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const size_t upUntilPos){
     if(!sctx){
         DEBUG("ZSTDSeek_Context is NULL\n");
@@ -151,7 +160,7 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const size_t 
 
     if(size >= ZSTD_SEEK_TABLE_FOOTER_SIZE){
         uint8_t *footer = (uint8_t *)buff + (size - ZSTD_SEEK_TABLE_FOOTER_SIZE);
-        const uint32_t magicnumber = ZSTDSeek_fromLE32(*((uint32_t *)(footer + 5)));
+        const uint32_t magicnumber = load_le32(footer + 5);
 
         if(magicnumber == ZSTD_SEEKABLE_MAGICNUMBER){
             DEBUG("Seektable detected\n");
@@ -162,7 +171,7 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const size_t 
             if((sfd >> 2) & 0x1f){
                 DEBUG("Last frame checksumFlag= %x: Bits 3-7 should be zero. Ignoring malformed seektable.\n",(uint32_t)sfd);
             }else{
-                const uint32_t numFrames = ZSTDSeek_fromLE32(*((uint32_t *)footer));
+                const uint32_t numFrames = load_le32(footer);
                 const uint32_t sizePerEntry = 8 + (checksumFlag ? 4 : 0);
 
                 /* Guard against uint32_t overflow in tableSize = sizePerEntry * numFrames.
@@ -178,11 +187,11 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const size_t 
                         DEBUG("Seektable frame size (%u) exceeds buffer size (%zu). Ignoring malformed seektable.\n", frameSize, size);
                     }else{
                         uint8_t *frame = (uint8_t *)buff + (size - frameSize);
-                        const uint32_t skippableHeader = ZSTDSeek_fromLE32(*((uint32_t *)frame));
+                        const uint32_t skippableHeader = load_le32(frame);
                         if(skippableHeader != (ZSTD_MAGIC_SKIPPABLE_START|0xE)){
                             DEBUG("Last frame Header = %u does not match magic number %u. Ignoring malformed seektable.\n", skippableHeader, (ZSTD_MAGIC_SKIPPABLE_START|0xE));
                         }else{
-                            const uint32_t _frameSize = ZSTDSeek_fromLE32(*((uint32_t *)(frame + 4)));
+                            const uint32_t _frameSize = load_le32(frame + 4);
                             if(_frameSize + ZSTD_SKIPPABLE_HEADER_SIZE != frameSize){
                                 DEBUG("Last frame size = %u does not match expected size = %u. Ignoring malformed seektable.\n", _frameSize + ZSTD_SKIPPABLE_HEADER_SIZE, frameSize);
                             }else{
@@ -191,8 +200,8 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const size_t 
                                 size_t dOffset = 0;
                                 for(uint32_t i = 0; i < numFrames; i++){
                                     ZSTDSeek_addJumpTableRecord(sctx->jt, cOffset, dOffset);
-                                    cOffset += ZSTDSeek_fromLE32(*((uint32_t *)(table + (i * sizePerEntry))));
-                                    dOffset += ZSTDSeek_fromLE32(*((uint32_t *)(table + (i * sizePerEntry) + 4)));
+                                    cOffset += load_le32(table + (i * sizePerEntry));
+                                    dOffset += load_le32(table + (i * sizePerEntry) + 4);
                                 }
                                 ZSTDSeek_addJumpTableRecord(sctx->jt, cOffset, dOffset);
 
@@ -225,7 +234,7 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const size_t 
     sctx->jumpTableFullyInitialized = 1;
 
     while (size > 0 && (frameCompressedSize = ZSTD_findFrameCompressedSize(buff, size))>0 && !ZSTD_isError(frameCompressedSize)) {
-        const uint32_t magic = ZSTDSeek_fromLE32(*((uint32_t *)buff));
+        const uint32_t magic = load_le32(buff);
         if((magic & ZSTD_MAGIC_SKIPPABLE_MASK) == ZSTD_MAGIC_SKIPPABLE_START){
             compressedPos += frameCompressedSize;
             buff = (uint8_t *)buff + frameCompressedSize;
