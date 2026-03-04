@@ -41,12 +41,12 @@ do { \
 #endif
 
 /** @name Error constants
- *  Returned by ZSTDSeek_seek() on failure.
+ *  Negative error codes returned by ZSTDSeek_seek() and ZSTDSeek_read().
  *  @{
  */
-#define ZSTDSEEK_ERR_NEGATIVE_SEEK (-1)
-#define ZSTDSEEK_ERR_BEYOND_END_SEEK (-2)
-#define ZSTDSEEK_ERR_READ (-3)
+#define ZSTDSEEK_ERR_NEGATIVE_SEEK (-1)   /**< Resolved seek position is negative. */
+#define ZSTDSEEK_ERR_BEYOND_END_SEEK (-2) /**< Resolved seek position exceeds file size. */
+#define ZSTDSEEK_ERR_READ (-3)            /**< Decompression or stream I/O error. */
 /** @} */
 
 /** @name Seekable format constants
