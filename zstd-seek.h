@@ -359,8 +359,12 @@ size_t ZSTDSeek_lastKnownUncompressedFileSize(ZSTDSeek_Context *sctx);
  * (ZSTDSeek_createFromFile(), ZSTDSeek_createFromFileDescriptor(), etc.).
  * For buffer-based contexts (ZSTDSeek_create()) this always returns -1.
  *
- * @warning The descriptor is managed by the context.  Do not close it
- *          while the context is alive.
+ * @note Ownership depends on how the context was created:
+ *       - **File-path** contexts (ZSTDSeek_createFromFile()): the context
+ *         owns the descriptor and closes it in ZSTDSeek_free().
+ *       - **File-descriptor** contexts (ZSTDSeek_createFromFileDescriptor()):
+ *         the caller retains ownership.  Do not close the descriptor while
+ *         the context is alive; close it yourself after ZSTDSeek_free().
  *
  * @param sctx  Context to query.
  * @return File descriptor, or -1 if unavailable.
