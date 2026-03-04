@@ -333,7 +333,8 @@ static int test_seek_end(int argc, char *argv[]) {
 
 /* ══════════════════════════════════════════════════════════════════════════
  * Test: seek_random <zst_path> <raw_path> <seed> <num_ops>
- * Random SEEK_SET + read 1 byte, verify.
+ * Random seek + read 1 byte, verify.  Alternates between SEEK_SET,
+ * SEEK_CUR and SEEK_END so all three origins are exercised.
  * ══════════════════════════════════════════════════════════════════════════*/
 static int test_seek_random(int argc, char *argv[]) {
     if (argc < 4) { FAIL("usage: seek_random <zst> <raw> <seed> <num_ops>"); return 1; }
@@ -352,8 +353,29 @@ static int test_seek_random(int argc, char *argv[]) {
     uint64_t state = seed;
     for (size_t i = 0; i < num_ops; i++) {
         size_t pos = (size_t)(xorshift64(&state) % raw_size);
-        int rc = ZSTDSeek_seek(ctx, (long)pos, SEEK_SET);
-        if (rc != 0) { FAIL("seek(%zu) failed at op %zu", pos, i); ZSTDSeek_free(ctx); free(raw); return 1; }
+        unsigned method = (unsigned)(xorshift64(&state) % 3);
+        int rc;
+
+        switch (method) {
+        case 0: /* SEEK_SET */
+            rc = ZSTDSeek_seek(ctx, (long)pos, SEEK_SET);
+            break;
+        case 1: { /* SEEK_CUR — relative from current position */
+            long cur = ZSTDSeek_tell(ctx);
+            rc = ZSTDSeek_seek(ctx, (long)pos - cur, SEEK_CUR);
+            break;
+        }
+        case 2: { /* SEEK_END — negative offset from end */
+            rc = ZSTDSeek_seek(ctx, (long)pos - (long)raw_size, SEEK_END);
+            break;
+        }
+        default: rc = -1; break;
+        }
+
+        if (rc != 0) {
+            FAIL("seek to %zu failed at op %zu (method=%u)", pos, i, method);
+            ZSTDSeek_free(ctx); free(raw); return 1;
+        }
         uint8_t byte;
         size_t n = ZSTDSeek_read(&byte, 1, ctx);
         if (n != 1) { FAIL("read at pos %zu returned %zu", pos, n); ZSTDSeek_free(ctx); free(raw); return 1; }
@@ -363,7 +385,7 @@ static int test_seek_random(int argc, char *argv[]) {
         }
     }
 
-    PASS("seek_random: %zu operations verified", num_ops);
+    PASS("seek_random: %zu operations verified (SEEK_SET/CUR/END)", num_ops);
     ZSTDSeek_free(ctx); free(raw);
     return 0;
 }
@@ -572,8 +594,31 @@ static int test_jump_table_auto(int argc, char *argv[]) {
         ZSTDSeek_free(ctx); return 1;
     }
 
-    PASS("jump_table_auto: frames=%zu, jt->length=%llu (expected data frames=%zu)",
-         frames, (unsigned long long)jt->length, expected);
+    /* Verify record monotonicity */
+    for (size_t i = 1; i < (size_t)jt->length; i++) {
+        if (jt->records[i].compressedPos < jt->records[i-1].compressedPos) {
+            FAIL("compressedPos not monotonic at record %zu: %zu < %zu",
+                 i, jt->records[i].compressedPos, jt->records[i-1].compressedPos);
+            ZSTDSeek_free(ctx); return 1;
+        }
+        if (jt->records[i].uncompressedPos < jt->records[i-1].uncompressedPos) {
+            FAIL("uncompressedPos not monotonic at record %zu: %zu < %zu",
+                 i, jt->records[i].uncompressedPos, jt->records[i-1].uncompressedPos);
+            ZSTDSeek_free(ctx); return 1;
+        }
+    }
+
+    /* Last record's uncompressedPos should equal uncompressedFileSize */
+    size_t file_size = ZSTDSeek_uncompressedFileSize(ctx);
+    size_t last_uncomp = jt->records[jt->length - 1].uncompressedPos;
+    if (last_uncomp != file_size) {
+        FAIL("last record uncompressedPos=%zu != uncompressedFileSize=%zu",
+             last_uncomp, file_size);
+        ZSTDSeek_free(ctx); return 1;
+    }
+
+    PASS("jump_table_auto: frames=%zu, jt->length=%llu, records monotonic, last=%zu",
+         frames, (unsigned long long)jt->length, file_size);
     ZSTDSeek_free(ctx);
     return 0;
 }
@@ -1023,6 +1068,664 @@ static int test_error_empty_file(int argc, char *argv[]) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+ * Test: seek_cur_backward <zst_path> <raw_path>
+ * SEEK_CUR with negative offset: read 1 byte, then SEEK_CUR(-3) to go
+ * backward by 2 net positions, visiting every even offset from high to low.
+ * ══════════════════════════════════════════════════════════════════════════*/
+static int test_seek_cur_backward(int argc, char *argv[]) {
+    if (argc < 2) { FAIL("usage: seek_cur_backward <zst> <raw>"); return 1; }
+
+    size_t raw_size;
+    uint8_t *raw = read_file(argv[1], &raw_size);
+    if (!raw) { FAIL("cannot read raw file"); return 1; }
+
+    ZSTDSeek_Context *ctx = ZSTDSeek_createFromFile(argv[0]);
+    if (!ctx) { FAIL("createFromFile failed"); free(raw); return 1; }
+
+    /* Start position: use 24 or less if the file is small */
+    size_t start = (raw_size > 24) ? 24 : (raw_size & ~(size_t)1);
+
+    int rc = ZSTDSeek_seek(ctx, (long)start, SEEK_SET);
+    if (rc != 0) { FAIL("initial seek(%zu) failed", start); ZSTDSeek_free(ctx); free(raw); return 1; }
+
+    size_t checked = 0;
+    for (long pos = (long)start; pos >= 0; pos -= 2) {
+        long tell = ZSTDSeek_tell(ctx);
+        if (tell != pos) {
+            FAIL("tell=%ld expected=%ld", tell, pos);
+            ZSTDSeek_free(ctx); free(raw); return 1;
+        }
+
+        uint8_t byte;
+        size_t n = ZSTDSeek_read(&byte, 1, ctx);
+        if (n != 1) { FAIL("read at pos %ld returned %zu", pos, n); ZSTDSeek_free(ctx); free(raw); return 1; }
+        if (byte != raw[pos]) {
+            FAIL("at pos %ld: got 0x%02x expected 0x%02x", pos, byte, raw[pos]);
+            ZSTDSeek_free(ctx); free(raw); return 1;
+        }
+        checked++;
+
+        /* After read(1) position is pos+1.  SEEK_CUR(-3) → pos+1-3 = pos-2 */
+        if (pos >= 2) {
+            rc = ZSTDSeek_seek(ctx, -3, SEEK_CUR);
+            if (rc != 0) {
+                FAIL("seek_cur(-3) from pos %ld failed with %d", pos + 1, rc);
+                ZSTDSeek_free(ctx); free(raw); return 1;
+            }
+        }
+    }
+
+    PASS("seek_cur_backward: %zu even positions verified (SEEK_CUR -3)", checked);
+    ZSTDSeek_free(ctx); free(raw);
+    return 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Test: seek_out_of_file <zst_path>
+ * 9 boundary cases for SEEK_SET/CUR/END with exact error codes.
+ * ══════════════════════════════════════════════════════════════════════════*/
+static int test_seek_out_of_file(int argc, char *argv[]) {
+    if (argc < 1) { FAIL("usage: seek_out_of_file <zst>"); return 1; }
+
+    ZSTDSeek_Context *ctx = ZSTDSeek_createFromFile(argv[0]);
+    if (!ctx) { FAIL("createFromFile failed"); return 1; }
+
+    size_t N = ZSTDSeek_uncompressedFileSize(ctx);
+    int rc, failures = 0;
+
+    /* 1. seek(-1, SEEK_SET) → NEGATIVE_SEEK */
+    rc = ZSTDSeek_seek(ctx, -1, SEEK_SET);
+    if (rc != ZSTDSEEK_ERR_NEGATIVE_SEEK) {
+        FAIL("case 1: seek(-1,SET)=%d expected=%d", rc, ZSTDSEEK_ERR_NEGATIVE_SEEK); failures++;
+    }
+
+    /* 2. seek(N, SEEK_SET) → 0 (EOF position is valid) */
+    rc = ZSTDSeek_seek(ctx, (long)N, SEEK_SET);
+    if (rc != 0) {
+        FAIL("case 2: seek(N=%zu,SET)=%d expected=0", N, rc); failures++;
+    }
+
+    /* 3. seek(N+1, SEEK_SET) → BEYOND_END */
+    rc = ZSTDSeek_seek(ctx, (long)(N + 1), SEEK_SET);
+    if (rc != ZSTDSEEK_ERR_BEYOND_END_SEEK) {
+        FAIL("case 3: seek(N+1=%zu,SET)=%d expected=%d", N + 1, rc, ZSTDSEEK_ERR_BEYOND_END_SEEK); failures++;
+    }
+
+    /* 4. seek(1, SEEK_END) → BEYOND_END */
+    rc = ZSTDSeek_seek(ctx, 1, SEEK_END);
+    if (rc != ZSTDSEEK_ERR_BEYOND_END_SEEK) {
+        FAIL("case 4: seek(1,END)=%d expected=%d", rc, ZSTDSEEK_ERR_BEYOND_END_SEEK); failures++;
+    }
+
+    /* 5. seek(-N, SEEK_END) → 0 (position 0) */
+    rc = ZSTDSeek_seek(ctx, -(long)N, SEEK_END);
+    if (rc != 0) {
+        FAIL("case 5: seek(-N=%ld,END)=%d expected=0", -(long)N, rc); failures++;
+    } else {
+        long tell = ZSTDSeek_tell(ctx);
+        if (tell != 0) { FAIL("case 5: tell=%ld expected=0", tell); failures++; }
+    }
+
+    /* 6. seek(-(N+1), SEEK_END) → NEGATIVE_SEEK */
+    rc = ZSTDSeek_seek(ctx, -(long)(N + 1), SEEK_END);
+    if (rc != ZSTDSEEK_ERR_NEGATIVE_SEEK) {
+        FAIL("case 6: seek(-(N+1)=%ld,END)=%d expected=%d", -(long)(N + 1), rc, ZSTDSEEK_ERR_NEGATIVE_SEEK); failures++;
+    }
+
+    /* 7. seek(-1, SEEK_CUR) from pos 0 → NEGATIVE_SEEK */
+    ZSTDSeek_seek(ctx, 0, SEEK_SET);
+    rc = ZSTDSeek_seek(ctx, -1, SEEK_CUR);
+    if (rc != ZSTDSEEK_ERR_NEGATIVE_SEEK) {
+        FAIL("case 7: seek(-1,CUR)@0=%d expected=%d", rc, ZSTDSEEK_ERR_NEGATIVE_SEEK); failures++;
+    }
+
+    /* 8. seek(N, SEEK_CUR) from pos 0 → 0 (EOF position) */
+    ZSTDSeek_seek(ctx, 0, SEEK_SET);
+    rc = ZSTDSeek_seek(ctx, (long)N, SEEK_CUR);
+    if (rc != 0) {
+        FAIL("case 8: seek(N=%zu,CUR)@0=%d expected=0", N, rc); failures++;
+    }
+
+    /* 9. seek(N+1, SEEK_CUR) from pos 0 → BEYOND_END */
+    ZSTDSeek_seek(ctx, 0, SEEK_SET);
+    rc = ZSTDSeek_seek(ctx, (long)(N + 1), SEEK_CUR);
+    if (rc != ZSTDSEEK_ERR_BEYOND_END_SEEK) {
+        FAIL("case 9: seek(N+1=%zu,CUR)@0=%d expected=%d", N + 1, rc, ZSTDSEEK_ERR_BEYOND_END_SEEK); failures++;
+    }
+
+    if (failures > 0) { FAIL("seek_out_of_file: %d/9 cases failed", failures); ZSTDSeek_free(ctx); return 1; }
+
+    PASS("seek_out_of_file: all 9 boundary cases passed (N=%zu)", N);
+    ZSTDSeek_free(ctx);
+    return 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Test: read_too_much <zst_path> <raw_path>
+ * Request 2× the file size from position 0.  Verify short read, tell,
+ * data content, and that a second read returns 0.
+ * ══════════════════════════════════════════════════════════════════════════*/
+static int test_read_too_much(int argc, char *argv[]) {
+    if (argc < 2) { FAIL("usage: read_too_much <zst> <raw>"); return 1; }
+
+    size_t raw_size;
+    uint8_t *raw = read_file(argv[1], &raw_size);
+    if (!raw) { FAIL("cannot read raw file"); return 1; }
+
+    ZSTDSeek_Context *ctx = ZSTDSeek_createFromFile(argv[0]);
+    if (!ctx) { FAIL("createFromFile failed"); free(raw); return 1; }
+
+    size_t file_size = ZSTDSeek_uncompressedFileSize(ctx);
+    size_t request = file_size * 2;
+    uint8_t *buf = malloc(request);
+    if (!buf) { FAIL("malloc(%zu) failed", request); ZSTDSeek_free(ctx); free(raw); return 1; }
+
+    /* First read: request 2× file size → short read of exactly file_size */
+    size_t n = ZSTDSeek_read(buf, request, ctx);
+    if (n != file_size) {
+        FAIL("expected short read of %zu, got %zu", file_size, n);
+        free(buf); ZSTDSeek_free(ctx); free(raw); return 1;
+    }
+
+    long tell = ZSTDSeek_tell(ctx);
+    if ((size_t)tell != file_size) {
+        FAIL("tell=%ld expected=%zu after short read", tell, file_size);
+        free(buf); ZSTDSeek_free(ctx); free(raw); return 1;
+    }
+
+    if (memcmp(buf, raw, file_size) != 0) {
+        FAIL("data mismatch in short read");
+        free(buf); ZSTDSeek_free(ctx); free(raw); return 1;
+    }
+
+    /* Second read at EOF → 0 bytes */
+    size_t n2 = ZSTDSeek_read(buf, request, ctx);
+    if (n2 != 0) {
+        FAIL("expected 0 bytes at EOF, got %zu", n2);
+        free(buf); ZSTDSeek_free(ctx); free(raw); return 1;
+    }
+
+    tell = ZSTDSeek_tell(ctx);
+    if ((size_t)tell != file_size) {
+        FAIL("tell=%ld expected=%zu after second read", tell, file_size);
+        free(buf); ZSTDSeek_free(ctx); free(raw); return 1;
+    }
+
+    PASS("read_too_much: requested %zu, got %zu, tell=%ld, re-read=0", request, n, tell);
+    free(buf); ZSTDSeek_free(ctx); free(raw);
+    return 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Test: jump_table_manual <zst_path>
+ * Open with auto JT to discover frame positions, then re-open without JT
+ * and manually add the same records.  Verify lengths and file size match.
+ * ══════════════════════════════════════════════════════════════════════════*/
+static int test_jump_table_manual(int argc, char *argv[]) {
+    if (argc < 1) { FAIL("usage: jump_table_manual <zst>"); return 1; }
+
+    /* Step 1: open with auto JT to get reference records */
+    ZSTDSeek_Context *ref = ZSTDSeek_createFromFile(argv[0]);
+    if (!ref) { FAIL("createFromFile (ref) failed"); return 1; }
+
+    ZSTDSeek_JumpTable *ref_jt = ZSTDSeek_getJumpTableOfContext(ref);
+    if (!ref_jt || ref_jt->length < 2) {
+        FAIL("need at least 2 JT records"); ZSTDSeek_free(ref); return 1;
+    }
+
+    size_t num_records = (size_t)ref_jt->length;
+    size_t *comp_pos  = malloc(num_records * sizeof(size_t));
+    size_t *uncomp_pos = malloc(num_records * sizeof(size_t));
+    for (size_t i = 0; i < num_records; i++) {
+        comp_pos[i]  = ref_jt->records[i].compressedPos;
+        uncomp_pos[i] = ref_jt->records[i].uncompressedPos;
+    }
+    size_t ref_file_size = ZSTDSeek_uncompressedFileSize(ref);
+    ZSTDSeek_free(ref);
+
+    /* Step 2: open without JT and manually add records */
+    ZSTDSeek_Context *ctx = ZSTDSeek_createFromFileWithoutJumpTable(argv[0]);
+    if (!ctx) {
+        FAIL("createFromFileWithoutJumpTable failed");
+        free(comp_pos); free(uncomp_pos); return 1;
+    }
+
+    ZSTDSeek_JumpTable *jt = ZSTDSeek_getJumpTableOfContext(ctx);
+    if (!jt) {
+        FAIL("getJumpTableOfContext returned NULL");
+        ZSTDSeek_free(ctx); free(comp_pos); free(uncomp_pos); return 1;
+    }
+
+    for (size_t i = 0; i < num_records; i++) {
+        ZSTDSeek_addJumpTableRecord(jt, comp_pos[i], uncomp_pos[i]);
+        if ((size_t)jt->length != i + 1) {
+            FAIL("after add[%zu]: length=%llu expected=%zu",
+                 i, (unsigned long long)jt->length, i + 1);
+            ZSTDSeek_free(ctx); free(comp_pos); free(uncomp_pos); return 1;
+        }
+    }
+
+    /* Last record's uncompressedPos is the file size */
+    size_t manual_size = jt->records[num_records - 1].uncompressedPos;
+    if (manual_size != ref_file_size) {
+        FAIL("manual file_size=%zu expected=%zu", manual_size, ref_file_size);
+        ZSTDSeek_free(ctx); free(comp_pos); free(uncomp_pos); return 1;
+    }
+
+    PASS("jump_table_manual: %zu records added, file_size=%zu", num_records, ref_file_size);
+    ZSTDSeek_free(ctx); free(comp_pos); free(uncomp_pos);
+    return 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Test: jt_progressive_reads <zst_path> <raw_path>
+ * Open without JT, then trigger JT growth through sequential reads that
+ * cross frame boundaries.  Verify data correctness and JT length growth.
+ * ══════════════════════════════════════════════════════════════════════════*/
+static int test_jt_progressive_reads(int argc, char *argv[]) {
+    if (argc < 2) { FAIL("usage: jt_progressive_reads <zst> <raw>"); return 1; }
+
+    size_t raw_size;
+    uint8_t *raw = read_file(argv[1], &raw_size);
+    if (!raw) { FAIL("cannot read raw file"); return 1; }
+
+    /* Get reference frame boundaries from an auto-JT context */
+    ZSTDSeek_Context *ref = ZSTDSeek_createFromFile(argv[0]);
+    if (!ref) { FAIL("createFromFile (ref) failed"); free(raw); return 1; }
+    ZSTDSeek_JumpTable *ref_jt = ZSTDSeek_getJumpTableOfContext(ref);
+    if (!ref_jt || ref_jt->length < 3) {
+        FAIL("need at least 2 data frames"); ZSTDSeek_free(ref); free(raw); return 1;
+    }
+    size_t frame1_end = ref_jt->records[1].uncompressedPos;
+    ZSTDSeek_free(ref);
+
+    /* Open without JT */
+    ZSTDSeek_Context *ctx = ZSTDSeek_createFromFileWithoutJumpTable(argv[0]);
+    if (!ctx) { FAIL("createFromFileWithoutJumpTable failed"); free(raw); return 1; }
+
+    ZSTDSeek_JumpTable *jt = ZSTDSeek_getJumpTableOfContext(ctx);
+    if (!jt) { FAIL("getJumpTableOfContext NULL"); ZSTDSeek_free(ctx); free(raw); return 1; }
+
+    uint64_t initial_len = jt->length;
+    INFO("initial jt->length=%llu", (unsigned long long)initial_len);
+
+    /* Read 1 byte — should trigger JT growth (at least first frame discovered) */
+    uint8_t byte;
+    size_t n = ZSTDSeek_read(&byte, 1, ctx);
+    if (n != 1 || byte != raw[0]) {
+        FAIL("first read: n=%zu byte=0x%02x expected=0x%02x", n, byte, raw[0]);
+        ZSTDSeek_free(ctx); free(raw); return 1;
+    }
+
+    uint64_t after_read1 = jt->length;
+    INFO("after 1-byte read: jt->length=%llu", (unsigned long long)after_read1);
+    if (after_read1 <= initial_len) {
+        FAIL("jt->length did not grow after first read: %llu -> %llu",
+             (unsigned long long)initial_len, (unsigned long long)after_read1);
+        ZSTDSeek_free(ctx); free(raw); return 1;
+    }
+
+    /* Read across first frame boundary into second frame.
+     * The library may return short reads at frame boundaries, so we loop. */
+    if (frame1_end > 1 && frame1_end + 1 <= raw_size) {
+        size_t target = frame1_end + 1;
+        size_t current_pos = 1;
+        size_t remaining = target - current_pos;
+        uint8_t *buf = malloc(remaining);
+        size_t total_read = 0;
+        while (total_read < remaining) {
+            n = ZSTDSeek_read(buf + total_read, remaining - total_read, ctx);
+            if (n == 0) {
+                FAIL("unexpected EOF at pos %zu during cross-frame read", current_pos + total_read);
+                free(buf); ZSTDSeek_free(ctx); free(raw); return 1;
+            }
+            total_read += n;
+        }
+        if (memcmp(buf, raw + current_pos, remaining) != 0) {
+            FAIL("cross-frame data mismatch");
+            free(buf); ZSTDSeek_free(ctx); free(raw); return 1;
+        }
+        free(buf);
+
+        uint64_t after_cross = jt->length;
+        INFO("after cross-frame read to %zu: jt->length=%llu", target, (unsigned long long)after_cross);
+        if (after_cross < after_read1) {
+            FAIL("jt->length decreased: %llu -> %llu",
+                 (unsigned long long)after_read1, (unsigned long long)after_cross);
+            ZSTDSeek_free(ctx); free(raw); return 1;
+        }
+    }
+
+    /* Seek to end → fully initializes JT */
+    int rc = ZSTDSeek_seek(ctx, 0, SEEK_END);
+    if (rc != 0) { FAIL("seek(0, SEEK_END) failed"); ZSTDSeek_free(ctx); free(raw); return 1; }
+
+    uint64_t after_end = jt->length;
+    INFO("after SEEK_END: jt->length=%llu", (unsigned long long)after_end);
+
+    /* JT should be fully initialized now */
+    if (!ZSTDSeek_jumpTableIsInitialized(ctx)) {
+        FAIL("JT not fully initialized after SEEK_END");
+        ZSTDSeek_free(ctx); free(raw); return 1;
+    }
+
+    /* JT must have grown from the initial state */
+    if (after_end <= initial_len) {
+        FAIL("JT did not grow: initial=%llu final=%llu",
+             (unsigned long long)initial_len, (unsigned long long)after_end);
+        ZSTDSeek_free(ctx); free(raw); return 1;
+    }
+
+    /* Last record's uncompressedPos must equal the full file size */
+    size_t full_size = ZSTDSeek_uncompressedFileSize(ctx);
+    if (full_size != raw_size) {
+        FAIL("uncompressedFileSize=%zu expected=%zu", full_size, raw_size);
+        ZSTDSeek_free(ctx); free(raw); return 1;
+    }
+    size_t last_uncomp = jt->records[after_end - 1].uncompressedPos;
+    if (last_uncomp != full_size) {
+        FAIL("last record uncompressedPos=%zu != file_size=%zu", last_uncomp, full_size);
+        ZSTDSeek_free(ctx); free(raw); return 1;
+    }
+
+    PASS("jt_progressive_reads: JT grew %llu -> %llu via reads, file_size=%zu",
+         (unsigned long long)initial_len, (unsigned long long)after_end, full_size);
+    ZSTDSeek_free(ctx); free(raw);
+    return 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Test: error_corrupted_header <zst_path>
+ * Read a valid .zst, corrupt the magic number, verify rejection.
+ * ══════════════════════════════════════════════════════════════════════════*/
+static int test_error_corrupted_header(int argc, char *argv[]) {
+    if (argc < 1) { FAIL("usage: error_corrupted_header <zst>"); return 1; }
+
+    size_t zst_size;
+    uint8_t *zst = read_file(argv[0], &zst_size);
+    if (!zst || zst_size < 4) { FAIL("cannot read zst file or too small"); free(zst); return 1; }
+
+    /* Corrupt the magic number */
+    zst[0] &= 0xF0;
+
+    ZSTDSeek_Context *ctx = ZSTDSeek_create(zst, zst_size);
+    if (ctx) {
+        FAIL("create should fail for corrupted header");
+        ZSTDSeek_free(ctx); free(zst); return 1;
+    }
+
+    PASS("error_corrupted_header: correctly rejected corrupted magic");
+    free(zst);
+    return 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Test: error_mixed_format <zst_path>
+ * Buffer = valid ZSTD + garbage.  Create with valid-only size should work.
+ * ══════════════════════════════════════════════════════════════════════════*/
+static int test_error_mixed_format(int argc, char *argv[]) {
+    if (argc < 1) { FAIL("usage: error_mixed_format <zst>"); return 1; }
+
+    size_t zst_size;
+    uint8_t *zst = read_file(argv[0], &zst_size);
+    if (!zst) { FAIL("cannot read zst file"); return 1; }
+
+    /* Build mixed buffer: valid ZSTD followed by garbage */
+    size_t total = zst_size * 2;
+    uint8_t *mixed = malloc(total);
+    if (!mixed) { FAIL("malloc failed"); free(zst); return 1; }
+    memcpy(mixed, zst, zst_size);
+    memset(mixed + zst_size, 0xAA, zst_size);
+
+    /* Create with only the valid portion size → should succeed */
+    ZSTDSeek_Context *ctx = ZSTDSeek_create(mixed, zst_size);
+    if (!ctx) {
+        FAIL("create should succeed with valid-only size");
+        free(mixed); free(zst); return 1;
+    }
+
+    size_t frames = ZSTDSeek_getNumberOfFrames(ctx);
+    if (frames == 0) {
+        FAIL("getNumberOfFrames returned 0");
+        ZSTDSeek_free(ctx); free(mixed); free(zst); return 1;
+    }
+
+    INFO("mixed_format: valid portion %zu bytes -> %zu frames", zst_size, frames);
+
+    PASS("error_mixed_format: valid portion works (%zu frames)", frames);
+    ZSTDSeek_free(ctx); free(mixed); free(zst);
+    return 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Test: seek_cur_zero <zst_path>
+ * SEEK_CUR with offset 0 should be a no-op at any position.
+ * Exercises the early-return path (line ~501 in zstd-seek.c).
+ * ══════════════════════════════════════════════════════════════════════════*/
+static int test_seek_cur_zero(int argc, char *argv[]) {
+    if (argc < 1) { FAIL("usage: seek_cur_zero <zst>"); return 1; }
+
+    ZSTDSeek_Context *ctx = ZSTDSeek_createFromFile(argv[0]);
+    if (!ctx) { FAIL("createFromFile failed"); return 1; }
+
+    size_t file_size = ZSTDSeek_uncompressedFileSize(ctx);
+    int failures = 0;
+
+    /* Test at position 0 */
+    int rc = ZSTDSeek_seek(ctx, 0, SEEK_CUR);
+    if (rc != 0) { FAIL("seek(0,CUR)@0=%d expected=0", rc); failures++; }
+    if (ZSTDSeek_tell(ctx) != 0) { FAIL("tell=%ld expected=0 after seek(0,CUR)", ZSTDSeek_tell(ctx)); failures++; }
+
+    /* Seek to middle, then seek(0, CUR) */
+    long mid = (long)(file_size / 2);
+    ZSTDSeek_seek(ctx, mid, SEEK_SET);
+    rc = ZSTDSeek_seek(ctx, 0, SEEK_CUR);
+    if (rc != 0) { FAIL("seek(0,CUR)@%ld=%d expected=0", mid, rc); failures++; }
+    if (ZSTDSeek_tell(ctx) != mid) { FAIL("tell=%ld expected=%ld after seek(0,CUR)", ZSTDSeek_tell(ctx), mid); failures++; }
+
+    /* Seek to EOF, then seek(0, CUR) */
+    ZSTDSeek_seek(ctx, 0, SEEK_END);
+    long eof_pos = ZSTDSeek_tell(ctx);
+    rc = ZSTDSeek_seek(ctx, 0, SEEK_CUR);
+    if (rc != 0) { FAIL("seek(0,CUR)@EOF=%d expected=0", rc); failures++; }
+    if (ZSTDSeek_tell(ctx) != eof_pos) { FAIL("tell=%ld expected=%ld after seek(0,CUR)@EOF", ZSTDSeek_tell(ctx), eof_pos); failures++; }
+
+    if (failures > 0) { FAIL("seek_cur_zero: %d failures", failures); ZSTDSeek_free(ctx); return 1; }
+
+    PASS("seek_cur_zero: no-op at pos=0, mid=%ld, eof=%ld", mid, eof_pos);
+    ZSTDSeek_free(ctx);
+    return 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Test: fileno_buffer <zst_path>
+ * Create context from buffer → fileno should return -1.
+ * ══════════════════════════════════════════════════════════════════════════*/
+static int test_fileno_buffer(int argc, char *argv[]) {
+    if (argc < 1) { FAIL("usage: fileno_buffer <zst>"); return 1; }
+
+    size_t zst_size;
+    uint8_t *zst = read_file(argv[0], &zst_size);
+    if (!zst) { FAIL("cannot read zst file"); return 1; }
+
+    ZSTDSeek_Context *ctx = ZSTDSeek_create(zst, zst_size);
+    if (!ctx) { FAIL("create from buffer failed"); free(zst); return 1; }
+
+    int fd = ZSTDSeek_fileno(ctx);
+    if (fd != -1) {
+        FAIL("fileno on buffer context: got %d expected -1", fd);
+        ZSTDSeek_free(ctx); free(zst); return 1;
+    }
+
+    PASS("fileno_buffer: correctly returns -1 for buffer context");
+    ZSTDSeek_free(ctx); free(zst);
+    return 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Test: seek_to_same_pos <zst_path> <raw_path>
+ * Seek to a non-zero position, then seek again to the same position.
+ * Exercises the early-return path for offset==currentUncompressedPos.
+ * ══════════════════════════════════════════════════════════════════════════*/
+static int test_seek_to_same_pos(int argc, char *argv[]) {
+    if (argc < 2) { FAIL("usage: seek_to_same_pos <zst> <raw>"); return 1; }
+
+    size_t raw_size;
+    uint8_t *raw = read_file(argv[1], &raw_size);
+    if (!raw) { FAIL("cannot read raw file"); return 1; }
+
+    ZSTDSeek_Context *ctx = ZSTDSeek_createFromFile(argv[0]);
+    if (!ctx) { FAIL("createFromFile failed"); free(raw); return 1; }
+
+    /* Seek to position 100 (or smaller if file is small) */
+    size_t target = (raw_size > 100) ? 100 : raw_size / 2;
+    int rc = ZSTDSeek_seek(ctx, (long)target, SEEK_SET);
+    if (rc != 0) { FAIL("initial seek(%zu) failed", target); ZSTDSeek_free(ctx); free(raw); return 1; }
+
+    /* Read one byte to verify position */
+    uint8_t byte1;
+    size_t n = ZSTDSeek_read(&byte1, 1, ctx);
+    if (n != 1 || byte1 != raw[target]) {
+        FAIL("read@%zu: n=%zu got=0x%02x expected=0x%02x", target, n, byte1, raw[target]);
+        ZSTDSeek_free(ctx); free(raw); return 1;
+    }
+
+    /* Now seek back to the same target position */
+    rc = ZSTDSeek_seek(ctx, (long)target, SEEK_SET);
+    if (rc != 0) { FAIL("second seek(%zu) failed with %d", target, rc); ZSTDSeek_free(ctx); free(raw); return 1; }
+
+    /* Verify we can read the same byte again */
+    uint8_t byte2;
+    n = ZSTDSeek_read(&byte2, 1, ctx);
+    if (n != 1 || byte2 != raw[target]) {
+        FAIL("re-read@%zu: n=%zu got=0x%02x expected=0x%02x", target, n, byte2, raw[target]);
+        ZSTDSeek_free(ctx); free(raw); return 1;
+    }
+
+    if (byte1 != byte2) {
+        FAIL("bytes differ: first=0x%02x second=0x%02x", byte1, byte2);
+        ZSTDSeek_free(ctx); free(raw); return 1;
+    }
+
+    PASS("seek_to_same_pos: seek(%zu) twice produces identical reads", target);
+    ZSTDSeek_free(ctx); free(raw);
+    return 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Test: seekable_malformed_footer <zst_path> <raw_path>
+ * Read a seekable .zst into memory, corrupt the seekable footer in 3 ways:
+ *   (a) reserved bits in SFD byte
+ *   (b) skippable header magic
+ *   (c) frame size field
+ * In each case the library should ignore the footer and fall back to
+ * frame-by-frame scanning, still producing correct data.
+ * ══════════════════════════════════════════════════════════════════════════*/
+static int test_seekable_malformed_footer(int argc, char *argv[]) {
+    if (argc < 2) { FAIL("usage: seekable_malformed_footer <zst> <raw>"); return 1; }
+
+    size_t zst_size;
+    uint8_t *zst_orig = read_file(argv[0], &zst_size);
+    if (!zst_orig || zst_size < 20) { FAIL("cannot read zst or too small"); free(zst_orig); return 1; }
+
+    size_t raw_size;
+    uint8_t *raw = read_file(argv[1], &raw_size);
+    if (!raw) { FAIL("cannot read raw file"); free(zst_orig); return 1; }
+
+    int failures = 0;
+    uint8_t *zst = malloc(zst_size);
+    uint8_t *out = malloc(raw_size);
+
+    /* ── (a) Corrupt reserved bits in SFD byte ────────────────────────────
+     * SFD is at offset (size - 5): bits 2-6 should be zero.
+     * Set bit 2 to make it non-zero → library ignores seekable footer. */
+    memcpy(zst, zst_orig, zst_size);
+    zst[zst_size - 5] |= 0x04; /* set reserved bit 2 */
+
+    ZSTDSeek_Context *ctx = ZSTDSeek_create(zst, zst_size);
+    if (!ctx) {
+        FAIL("(a) reserved bits: create failed"); failures++;
+    } else {
+        size_t n = ZSTDSeek_read(out, raw_size, ctx);
+        if (n != raw_size || memcmp(out, raw, raw_size) != 0) {
+            FAIL("(a) reserved bits: data mismatch (n=%zu)", n); failures++;
+        } else {
+            PASS("(a) reserved bits: fallback to scanning OK");
+        }
+        ZSTDSeek_free(ctx);
+    }
+
+    /* ── (b) Corrupt skippable header magic ───────────────────────────────
+     * The seekable footer is a skippable frame with magic 0x184D2A5E.
+     * Find it and flip a bit. */
+    memcpy(zst, zst_orig, zst_size);
+    /* Footer: last 9 bytes = numFrames(4) + sfd(1) + seekTableMagic(4)
+     * From footer, we can calculate where the skippable frame header starts. */
+    {
+        uint8_t *footer = zst + (zst_size - 9);
+        uint8_t sfd = footer[4];
+        uint8_t checksumFlag = sfd >> 7;
+        uint32_t numFrames;
+        memcpy(&numFrames, footer, 4);
+        uint32_t sizePerEntry = 8 + (checksumFlag ? 4 : 0);
+        uint32_t tableSize = sizePerEntry * numFrames;
+        uint32_t frameSize = tableSize + 9 + 8; /* footer + skippable header */
+        uint8_t *frame_start = zst + (zst_size - frameSize);
+        /* Corrupt the skippable header magic (first 4 bytes of frame) */
+        frame_start[0] ^= 0xFF;
+
+        ctx = ZSTDSeek_create(zst, zst_size);
+        if (!ctx) {
+            FAIL("(b) bad skippable magic: create failed"); failures++;
+        } else {
+            size_t n = ZSTDSeek_read(out, raw_size, ctx);
+            if (n != raw_size || memcmp(out, raw, raw_size) != 0) {
+                FAIL("(b) bad skippable magic: data mismatch (n=%zu)", n); failures++;
+            } else {
+                PASS("(b) bad skippable magic: fallback to scanning OK");
+            }
+            ZSTDSeek_free(ctx);
+        }
+    }
+
+    /* ── (c) Corrupt frame size in skippable header ───────────────────────
+     * Bytes 4-7 of the skippable frame contain the frame content size.
+     * Set it to 0 to create a mismatch → library ignores footer. */
+    memcpy(zst, zst_orig, zst_size);
+    {
+        uint8_t *footer = zst + (zst_size - 9);
+        uint8_t sfd = footer[4];
+        uint8_t checksumFlag = sfd >> 7;
+        uint32_t numFrames;
+        memcpy(&numFrames, footer, 4);
+        uint32_t sizePerEntry = 8 + (checksumFlag ? 4 : 0);
+        uint32_t tableSize = sizePerEntry * numFrames;
+        uint32_t frameSize = tableSize + 9 + 8;
+        uint8_t *frame_start = zst + (zst_size - frameSize);
+        /* Corrupt the content size field (bytes 4-7) to 0 */
+        memset(frame_start + 4, 0, 4);
+
+        ctx = ZSTDSeek_create(zst, zst_size);
+        if (!ctx) {
+            FAIL("(c) bad frame size: create failed"); failures++;
+        } else {
+            size_t n = ZSTDSeek_read(out, raw_size, ctx);
+            if (n != raw_size || memcmp(out, raw, raw_size) != 0) {
+                FAIL("(c) bad frame size: data mismatch (n=%zu)", n); failures++;
+            } else {
+                PASS("(c) bad frame size: fallback to scanning OK");
+            }
+            ZSTDSeek_free(ctx);
+        }
+    }
+
+    free(out); free(zst); free(raw); free(zst_orig);
+    if (failures > 0) { FAIL("seekable_malformed_footer: %d/3 sub-tests failed", failures); return 1; }
+    PASS("seekable_malformed_footer: all 3 corruption variants handled gracefully");
+    return 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
  * Dispatch table
  * ══════════════════════════════════════════════════════════════════════════*/
 typedef struct {
@@ -1039,8 +1742,12 @@ static const TestEntry tests[] = {
     { "seek_set_sequential",    test_seek_set_sequential },
     { "seek_set_backward",      test_seek_set_backward },
     { "seek_cur_forward",       test_seek_cur_forward },
+    { "seek_cur_backward",      test_seek_cur_backward },
     { "seek_end",               test_seek_end },
     { "seek_random",            test_seek_random },
+    { "seek_out_of_file",       test_seek_out_of_file },
+    { "seek_cur_zero",          test_seek_cur_zero },
+    { "seek_to_same_pos",       test_seek_to_same_pos },
     /* Create variants */
     { "create_from_file",       test_create_from_file },
     { "create_from_file_no_jt", test_create_from_file_no_jt },
@@ -1052,6 +1759,8 @@ static const TestEntry tests[] = {
     { "jump_table_auto",        test_jump_table_auto },
     { "jump_table_progressive", test_jump_table_progressive },
     { "jump_table_new_free",    test_jump_table_new_free },
+    { "jump_table_manual",      test_jump_table_manual },
+    { "jt_progressive_reads",   test_jt_progressive_reads },
     /* Info */
     { "file_size",              test_file_size },
     { "last_known_size",        test_last_known_size },
@@ -1060,6 +1769,9 @@ static const TestEntry tests[] = {
     { "compressed_tell",        test_compressed_tell },
     /* Edge cases */
     { "frame_boundary",         test_frame_boundary },
+    { "read_too_much",          test_read_too_much },
+    { "fileno_buffer",          test_fileno_buffer },
+    { "seekable_malformed_footer", test_seekable_malformed_footer },
     /* Errors */
     { "error_null",             test_error_null },
     { "error_truncated",        test_error_truncated },
@@ -1069,6 +1781,8 @@ static const TestEntry tests[] = {
     { "error_seek_invalid_origin", test_error_seek_invalid_origin },
     { "error_read_past_eof",    test_error_read_past_eof },
     { "error_empty_file",       test_error_empty_file },
+    { "error_corrupted_header", test_error_corrupted_header },
+    { "error_mixed_format",     test_error_mixed_format },
     { NULL, NULL }
 };
 

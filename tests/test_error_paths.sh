@@ -92,6 +92,22 @@ case "$TEST_NAME" in
         log_pass "error_read_past_eof"
         ;;
 
+    error_corrupted_header)
+        gen_valid
+        log_step "error_corrupted_header"
+        run "$TEST_SEEK" error_corrupted_header "$WORK_DIR/valid.zst"
+        assert_rc 0 || exit 1
+        log_pass "error_corrupted_header"
+        ;;
+
+    error_mixed_format)
+        gen_valid
+        log_step "error_mixed_format"
+        run "$TEST_SEEK" error_mixed_format "$WORK_DIR/valid.zst"
+        assert_rc 0 || exit 1
+        log_pass "error_mixed_format"
+        ;;
+
     *)
         echo "Unknown error test: $TEST_NAME" >&2
         exit 1

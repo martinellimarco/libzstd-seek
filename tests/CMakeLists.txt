@@ -97,6 +97,7 @@ add_roundtrip_test(rt_large_frames             7  10  1048576)
 add_roundtrip_test(rt_no_content_size          8  4  1024  --no-content-size)
 add_roundtrip_test(rt_vary_size                9  10  10000  --seekable  --vary-size)
 add_roundtrip_test(rt_seekable_checksum       10  4  1024  --seekable  --checksum)
+add_roundtrip_test(rt_100frames_no_content_size 11 100 1000 --no-content-size)
 
 # ── API: context creation (6 variants) ───────────────────────────────────────
 add_api_test(api_create_file              create_from_file)
@@ -110,18 +111,23 @@ add_api_test(api_create_fd_no_jt          create_from_fd_no_jt)
 add_api_test(api_seek_set_seq             seek_set_sequential)
 add_api_test(api_seek_set_backward        seek_set_backward)
 add_api_test(api_seek_cur_forward         seek_cur_forward)
+add_api_test(api_seek_cur_backward        seek_cur_backward)
 add_api_test(api_seek_end                 seek_end)
 add_api_test(api_seek_random              seek_random)
+add_api_test(api_seek_out_of_file         seek_out_of_file)
 
 # ── API: jump table ──────────────────────────────────────────────────────────
 add_api_test(api_jt_auto                  jump_table_auto)
 add_api_test(api_jt_progressive           jump_table_progressive)
 add_api_test(api_jt_new_free              jump_table_new_free)
+add_api_test(api_jt_manual                jump_table_manual)
+add_api_test(api_jt_progressive_reads     jt_progressive_reads)
 
 # ── API: seekable format ─────────────────────────────────────────────────────
 add_api_test(api_seekable_basic           seekable_basic)
 add_api_test(api_seekable_checksum        seekable_checksum)
 add_api_test(api_seekable_vs_scan         seekable_vs_scan)
+add_api_test(api_seekable_malformed       seekable_malformed_footer)
 
 # ── API: info functions ──────────────────────────────────────────────────────
 add_api_test(api_file_size                file_size)
@@ -137,6 +143,12 @@ add_api_test(api_read_chunks              read_chunks)
 add_api_test(api_frame_boundary           frame_boundary)
 add_api_test(api_single_frame             single_frame)
 add_api_test(api_large_read               large_read)
+add_api_test(api_read_too_much            read_too_much)
+
+# ── API: edge cases ─────────────────────────────────────────────────────────
+add_api_test(api_seek_cur_zero           seek_cur_zero)
+add_api_test(api_seek_to_same_pos        seek_to_same_pos)
+add_api_test(api_fileno_buffer           fileno_buffer)
 
 # ── Error paths ──────────────────────────────────────────────────────────────
 add_error_test(err_null                   error_null)
@@ -147,6 +159,8 @@ add_error_test(err_seek_negative          error_seek_negative)
 add_error_test(err_seek_beyond            error_seek_beyond)
 add_error_test(err_seek_invalid_origin    error_seek_invalid_origin)
 add_error_test(err_read_past_eof          error_read_past_eof)
+add_error_test(err_corrupted_header       error_corrupted_header)
+add_error_test(err_mixed_format           error_mixed_format)
 
 # ── Apply COVERAGE / SANITIZE env vars to all tests ──────────────────────────
 foreach(tname
@@ -155,19 +169,26 @@ foreach(tname
     rt_single_frame rt_single_frame_seekable
     rt_large_frames rt_no_content_size
     rt_vary_size rt_seekable_checksum
+    rt_100frames_no_content_size
     api_create_file api_create_file_no_jt
     api_create_buffer api_create_buffer_no_jt
     api_create_fd api_create_fd_no_jt
     api_seek_set_seq api_seek_set_backward
-    api_seek_cur_forward api_seek_end api_seek_random
+    api_seek_cur_forward api_seek_cur_backward
+    api_seek_end api_seek_random api_seek_out_of_file
     api_jt_auto api_jt_progressive api_jt_new_free
+    api_jt_manual api_jt_progressive_reads
     api_seekable_basic api_seekable_checksum api_seekable_vs_scan
+    api_seekable_malformed
     api_file_size api_last_known_size api_frame_count
     api_is_multiframe api_fileno api_compressed_tell
     api_read_byte_by_byte api_read_chunks
     api_frame_boundary api_single_frame api_large_read
+    api_read_too_much
+    api_seek_cur_zero api_seek_to_same_pos api_fileno_buffer
     err_null err_empty_file err_truncated err_invalid_format
     err_seek_negative err_seek_beyond
-    err_seek_invalid_origin err_read_past_eof)
+    err_seek_invalid_origin err_read_past_eof
+    err_corrupted_header err_mixed_format)
     set_test_env(${tname})
 endforeach()

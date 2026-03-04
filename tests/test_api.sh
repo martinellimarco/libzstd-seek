@@ -67,6 +67,14 @@ case "$TEST_NAME" in
         log_pass "$TEST_NAME"
         ;;
 
+    seek_cur_backward)
+        gen_standard --seekable
+        log_step "$TEST_NAME"
+        run "$TEST_SEEK" "$TEST_NAME" "$WORK_DIR/test.zst" "$WORK_DIR/test.raw"
+        assert_rc 0 || exit 1
+        log_pass "$TEST_NAME"
+        ;;
+
     seek_end)
         gen_standard --seekable
         log_step "$TEST_NAME"
@@ -77,8 +85,25 @@ case "$TEST_NAME" in
 
     seek_random)
         gen_multiframe
-        log_step "$TEST_NAME (10000 ops)"
+        log_step "$TEST_NAME (10000 ops, SET/CUR/END)"
         run "$TEST_SEEK" "$TEST_NAME" "$WORK_DIR/multi.zst" "$WORK_DIR/multi.raw" 7 10000
+        assert_rc 0 || exit 1
+        log_pass "$TEST_NAME"
+        ;;
+
+    seek_out_of_file)
+        gen_standard --seekable
+        log_step "$TEST_NAME (9 boundary cases)"
+        run "$TEST_SEEK" "$TEST_NAME" "$WORK_DIR/test.zst"
+        assert_rc 0 || exit 1
+        log_pass "$TEST_NAME"
+        ;;
+
+    # ── Read pattern: read_too_much ───────────────────────────────────────────
+    read_too_much)
+        gen_standard --seekable
+        log_step "$TEST_NAME"
+        run "$TEST_SEEK" "$TEST_NAME" "$WORK_DIR/test.zst" "$WORK_DIR/test.raw"
         assert_rc 0 || exit 1
         log_pass "$TEST_NAME"
         ;;
@@ -103,6 +128,24 @@ case "$TEST_NAME" in
     jump_table_new_free)
         log_step "$TEST_NAME"
         run "$TEST_SEEK" "$TEST_NAME"
+        assert_rc 0 || exit 1
+        log_pass "$TEST_NAME"
+        ;;
+
+    jump_table_manual)
+        gen_standard --seekable
+        log_step "$TEST_NAME"
+        run "$TEST_SEEK" "$TEST_NAME" "$WORK_DIR/test.zst"
+        assert_rc 0 || exit 1
+        log_pass "$TEST_NAME"
+        ;;
+
+    jt_progressive_reads)
+        # Non-seekable format so JT grows incrementally via reads (not from footer)
+        "$GEN_SEEKABLE" 42 10 1000 "$WORK_DIR/progressive.zst" \
+            --dump-raw "$WORK_DIR/progressive.raw"
+        log_step "$TEST_NAME"
+        run "$TEST_SEEK" "$TEST_NAME" "$WORK_DIR/progressive.zst" "$WORK_DIR/progressive.raw"
         assert_rc 0 || exit 1
         log_pass "$TEST_NAME"
         ;;
@@ -241,6 +284,40 @@ case "$TEST_NAME" in
         run "$TEST_SEEK" read_all "$WORK_DIR/ns.zst" "$WORK_DIR/data.raw"
         assert_rc 0 || exit 1
         log_pass "$TEST_NAME: seekable and non-seekable produce same data"
+        ;;
+
+    seekable_malformed_footer)
+        "$GEN_SEEKABLE" 42 4 1024 "$WORK_DIR/seekable.zst" \
+            --dump-raw "$WORK_DIR/seekable.raw" --seekable
+        log_step "$TEST_NAME (3 corruption variants)"
+        run "$TEST_SEEK" "$TEST_NAME" "$WORK_DIR/seekable.zst" "$WORK_DIR/seekable.raw"
+        assert_rc 0 || exit 1
+        log_pass "$TEST_NAME"
+        ;;
+
+    # ── Edge case tests ─────────────────────────────────────────────────────
+    seek_cur_zero)
+        gen_standard --seekable
+        log_step "$TEST_NAME"
+        run "$TEST_SEEK" "$TEST_NAME" "$WORK_DIR/test.zst"
+        assert_rc 0 || exit 1
+        log_pass "$TEST_NAME"
+        ;;
+
+    seek_to_same_pos)
+        gen_standard --seekable
+        log_step "$TEST_NAME"
+        run "$TEST_SEEK" "$TEST_NAME" "$WORK_DIR/test.zst" "$WORK_DIR/test.raw"
+        assert_rc 0 || exit 1
+        log_pass "$TEST_NAME"
+        ;;
+
+    fileno_buffer)
+        gen_standard --seekable
+        log_step "$TEST_NAME"
+        run "$TEST_SEEK" "$TEST_NAME" "$WORK_DIR/test.zst"
+        assert_rc 0 || exit 1
+        log_pass "$TEST_NAME"
         ;;
 
     *)
