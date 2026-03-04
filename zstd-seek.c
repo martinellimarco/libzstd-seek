@@ -523,10 +523,12 @@ size_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context *
     const size_t shouldRead = toRead;
 
     if(sctx->tmpOutBuffPos < sctx->output.pos){
-        if(sctx->jc.uncompressedOffset > sctx->output.pos){
-            sctx->jc.uncompressedOffset -= sctx->output.pos;
+        const size_t available = sctx->output.pos - sctx->tmpOutBuffPos;
+        if(sctx->jc.uncompressedOffset >= available){
+            sctx->jc.uncompressedOffset -= available;
+            sctx->tmpOutBuffPos = sctx->output.pos;
         }else{
-            const size_t maxCopy = (sctx->output.pos - sctx->tmpOutBuffPos) - sctx->jc.uncompressedOffset;
+            const size_t maxCopy = available - sctx->jc.uncompressedOffset;
             size_t toCopy = maxCopy < toRead ? maxCopy : toRead;
 
             memcpy(outBuff, sctx->tmpOutBuff+sctx->tmpOutBuffPos+sctx->jc.uncompressedOffset, toCopy);
@@ -576,18 +578,22 @@ size_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context *
 
             sctx->currentCompressedPos += sctx->input.pos - prevInPos;
 
-            if(sctx->jc.uncompressedOffset > sctx->output.pos){
-                sctx->jc.uncompressedOffset -= sctx->output.pos;
-            }else{
-                const size_t maxCopy = (sctx->output.pos - sctx->tmpOutBuffPos) - sctx->jc.uncompressedOffset;
-                size_t toCopy = maxCopy < toRead ? maxCopy : toRead;
+            {
+                const size_t available = sctx->output.pos - sctx->tmpOutBuffPos;
+                if(sctx->jc.uncompressedOffset >= available){
+                    sctx->jc.uncompressedOffset -= available;
+                    sctx->tmpOutBuffPos = sctx->output.pos;
+                }else{
+                    const size_t maxCopy = available - sctx->jc.uncompressedOffset;
+                    size_t toCopy = maxCopy < toRead ? maxCopy : toRead;
 
-                memcpy(outBuff, sctx->tmpOutBuff+sctx->tmpOutBuffPos+sctx->jc.uncompressedOffset, toCopy);
-                toRead -= toCopy;
-                outBuff = (uint8_t *)outBuff + toCopy;
-                sctx->currentUncompressedPos += toCopy;
-                sctx->tmpOutBuffPos += toCopy + sctx->jc.uncompressedOffset;
-                sctx->jc.uncompressedOffset = 0;
+                    memcpy(outBuff, sctx->tmpOutBuff+sctx->tmpOutBuffPos+sctx->jc.uncompressedOffset, toCopy);
+                    toRead -= toCopy;
+                    outBuff = (uint8_t *)outBuff + toCopy;
+                    sctx->currentUncompressedPos += toCopy;
+                    sctx->tmpOutBuffPos += toCopy + sctx->jc.uncompressedOffset;
+                    sctx->jc.uncompressedOffset = 0;
+                }
             }
 
             if(toRead == 0){
