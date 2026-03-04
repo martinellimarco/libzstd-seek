@@ -102,20 +102,22 @@ void ZSTDSeek_addJumpTableRecord(ZSTDSeek_JumpTable* jt, const size_t compressed
     }
 
     if(jt->length == jt->capacity){
-        if(jt->capacity == UINT64_MAX){
+        const uint64_t maxCapacity = SIZE_MAX / sizeof(ZSTDSeek_JumpTableRecord);
+        if(jt->capacity >= maxCapacity){
             DEBUG("Jump Table: Maximum capacity reached\n");
             return;
-        }else if(jt->capacity < (UINT64_MAX>>1)){
-            jt->capacity *= 2;
-        }else{
-            jt->capacity = UINT64_MAX;
         }
-        ZSTDSeek_JumpTableRecord* newRecords = realloc(jt->records, jt->capacity*sizeof(ZSTDSeek_JumpTableRecord));
+        uint64_t newCapacity = jt->capacity * 2;
+        if(newCapacity > maxCapacity || newCapacity < jt->capacity){ /* overflow or exceed */
+            newCapacity = maxCapacity;
+        }
+        ZSTDSeek_JumpTableRecord* newRecords = realloc(jt->records, (size_t)(newCapacity * sizeof(ZSTDSeek_JumpTableRecord)));
         if(!newRecords){
             DEBUG("Jump Table: Unable to allocate memory\n");
             return;
         }
         jt->records = newRecords;
+        jt->capacity = newCapacity;
     }
 
     jt->records[jt->length++] = (ZSTDSeek_JumpTableRecord){
