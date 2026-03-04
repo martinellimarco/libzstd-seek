@@ -125,6 +125,41 @@ directory by CMake and contains:
 
 ---
 
+## Expected timeouts
+
+The fuzzer will occasionally report timeouts on crafted inputs. These are
+**expected behavior**, not bugs:
+
+### Decompression bombs
+
+ZSTD frames compressed without the content-size field (`--no-content-size`)
+force `initializeJumpTableUpUntilPos` to fully decompress each frame to
+determine its uncompressed size. A small crafted input (tens of bytes) with a
+high compression ratio can decompress to gigabytes, exceeding `-timeout`.
+
+This is **by design** — the library supports arbitrarily large frames and
+cannot impose an arbitrary decompression limit. The fuzzer's `-timeout` flag
+correctly catches these inputs and writes them as `timeout-*` artifacts.
+
+These timeout artifacts are safe to ignore; they do not indicate memory safety
+issues.
+
+### ASAN quarantine overhead
+
+ASAN instrumentation adds overhead to memory management. Occasionally, the
+ASAN quarantine cleanup (during `free()`) triggers during a fuzzer iteration,
+causing a timeout that appears to occur inside `ZSTDSeek_free` or
+`ZSTD_freeDCtx`. These are false positives — the library code completed
+normally; only the sanitizer bookkeeping is slow.
+
+If you see frequent ASAN-related timeouts, increase the timeout value:
+
+```bash
+./fuzz_seekable corpus_seekable/ -dict=zstd_seek.dict -max_len=4096 -timeout=30 -detect_leaks=0
+```
+
+---
+
 ## Reproducing and minimizing crashes
 
 ```bash
