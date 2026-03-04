@@ -557,7 +557,6 @@ size_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context *
              * passing them to the decompressor. */
             const uint32_t magic = load_le32(sctx->inBuff);
             if((magic & ZSTD_MAGIC_SKIPPABLE_MASK) == ZSTD_MAGIC_SKIPPABLE_START){
-                sctx->currentCompressedPos += sctx->lastFrameCompressedSize;
                 sctx->inBuff += sctx->lastFrameCompressedSize;
                 continue;
             }
@@ -568,15 +567,14 @@ size_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context *
         while(sctx->input.pos < sctx->input.size){
             sctx->output = (ZSTD_outBuffer){ sctx->tmpOutBuff, sctx->tmpOutBuffSize, 0 };
             sctx->tmpOutBuffPos = 0;
-            const size_t prevInPos = sctx->input.pos;
             const size_t ret = ZSTD_decompressStream(sctx->dctx, &sctx->output , &sctx->input);
 
             if(ZSTD_isError(ret)){
                 DEBUG("Error decompressing: %s\n", ZSTD_getErrorName(ret));
+                sctx->currentCompressedPos =
+                    (size_t)((uint8_t *)sctx->inBuff - (uint8_t *)sctx->buff) + sctx->input.pos;
                 return 0;
             }
-
-            sctx->currentCompressedPos += sctx->input.pos - prevInPos;
 
             {
                 const size_t available = sctx->output.pos - sctx->tmpOutBuffPos;
@@ -603,12 +601,18 @@ size_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context *
 
         if(sctx->input.pos == sctx->input.size){ //end of frame
             sctx->inBuff+=sctx->lastFrameCompressedSize;
+            sctx->input = (ZSTD_inBuffer){sctx->inBuff, 0, 0};
         }
 
         if(toRead == 0){
             break;
         }
     }
+
+    /* Compute currentCompressedPos from absolute pointers so it stays
+     * consistent regardless of which code path was taken above. */
+    sctx->currentCompressedPos =
+        (size_t)((uint8_t *)sctx->inBuff - (uint8_t *)sctx->buff) + sctx->input.pos;
 
     return shouldRead - toRead;
 }
