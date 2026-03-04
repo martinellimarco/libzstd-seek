@@ -629,7 +629,7 @@ int ZSTDSeek_seek(ZSTDSeek_Context *sctx, long offset, int origin){
             return 0;
         }
 
-        const ZSTDSeek_JumpCoordinate new_jc = ZSTDSeek_getJumpCoordinate(sctx, offset);
+        const ZSTDSeek_JumpCoordinate new_jc = ZSTDSeek_getJumpCoordinate(sctx, (size_t)offset);
 
         if(sctx->jc.compressedOffset != new_jc.compressedOffset || offset < sctx->currentUncompressedPos){ //reset
             ZSTD_DCtx_reset(sctx->dctx, ZSTD_reset_session_only);
