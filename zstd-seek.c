@@ -660,6 +660,9 @@ int ZSTDSeek_seek(ZSTDSeek_Context *sctx, long offset, int origin){
                 }
                 toSkipTotal -= bytesRead;
             }
+            if(toSkipTotal > 0){
+                return -1;
+            }
         }
     }else{
         DEBUG("Invalid origin\n");
