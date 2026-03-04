@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later OR MIT
+
 /* ******************************************************************
  * libzstd-seek
  * Copyright (c) 2020, Martinelli Marco
@@ -5,8 +7,8 @@
  * You can contact the author at :
  * - Source repository : https://github.com/martinellimarco/libzstd-seek
  *
- * This source code is licensed under the GPLv3 (found in the LICENSE
- * file in the root directory of this source tree).
+ * This source code is licensed under both the MIT license (found in
+ * the LICENSE file) and the GPLv3 (found in the COPYING file).
 ****************************************************************** */
 
 #include <fcntl.h>
@@ -86,7 +88,7 @@ void ZSTDSeek_freeJumpTable(ZSTDSeek_JumpTable* jt){
     free(jt);
 }
 
-void ZSTDSeek_addJumpTableRecord(ZSTDSeek_JumpTable* jt, size_t compressedPos, size_t uncompressedPos){
+void ZSTDSeek_addJumpTableRecord(ZSTDSeek_JumpTable* jt, const size_t compressedPos, const size_t uncompressedPos){
     if(!jt){
         DEBUG("Invalid argument");
         return;
@@ -101,7 +103,12 @@ void ZSTDSeek_addJumpTableRecord(ZSTDSeek_JumpTable* jt, size_t compressedPos, s
         }else{
             jt->capacity = UINT64_MAX;
         }
-        jt->records = realloc(jt->records, jt->capacity*sizeof(ZSTDSeek_JumpTableRecord));
+        ZSTDSeek_JumpTableRecord* newRecords = realloc(jt->records, jt->capacity*sizeof(ZSTDSeek_JumpTableRecord));
+        if(!newRecords){
+            DEBUG("Jump Table: Unable to allocate memory\n");
+            return;
+        }
+        jt->records = newRecords;
     }
 
     jt->records[jt->length++] = (ZSTDSeek_JumpTableRecord){
@@ -111,6 +118,9 @@ void ZSTDSeek_addJumpTableRecord(ZSTDSeek_JumpTable* jt, size_t compressedPos, s
 }
 
 int ZSTDSeek_initializeJumpTable(ZSTDSeek_Context *sctx){
+    if(sctx && sctx->jumpTableFullyInitialized && sctx->jt->length > 0){
+        return 0;
+    }
     return ZSTDSeek_initializeJumpTableUpUntilPos(sctx, SIZE_MAX);
 }
 
@@ -119,19 +129,18 @@ bool ZSTDSeek_isLittleEndian(){
     return *(char*)(&x) == 1;
 }
 
-uint32_t ZSTDSeek_fromLE32(uint32_t data){
+uint32_t ZSTDSeek_fromLE32(const uint32_t data){
     if(ZSTDSeek_isLittleEndian()){
         return data;
     }else{
-        uint32_t swap = ((data & 0xFF000000) >> 24) |
-                        ((data & 0x00FF0000) >> 8)  |
-                        ((data & 0x0000FF00) << 8)  |
-                        ((data & 0x000000FF) << 24);
-        return swap;
+        return ((data & 0xFF000000) >> 24) |
+               ((data & 0x00FF0000) >> 8)  |
+               ((data & 0x0000FF00) << 8)  |
+               ((data & 0x000000FF) << 24);
     }
 }
 
-int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUntilPos){
+int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const size_t upUntilPos){
     if(!sctx){
         DEBUG("ZSTDSeek_Context is NULL\n");
         return -1;
@@ -140,48 +149,62 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
     void *buff = sctx->buff;
     size_t size = sctx->size;
 
-    uint8_t *footer = (uint8_t *)buff + (size - ZSTD_SEEK_TABLE_FOOTER_SIZE);
-    uint32_t magicnumber = ZSTDSeek_fromLE32(*((uint32_t *)(footer + 5)));
+    if(size >= ZSTD_SEEK_TABLE_FOOTER_SIZE){
+        uint8_t *footer = (uint8_t *)buff + (size - ZSTD_SEEK_TABLE_FOOTER_SIZE);
+        const uint32_t magicnumber = ZSTDSeek_fromLE32(*((uint32_t *)(footer + 5)));
 
-    if(magicnumber == ZSTD_SEEKABLE_MAGICNUMBER){
-        DEBUG("Seektable detected\n");
-        uint8_t sfd = *((uint8_t*)(footer + 4));
-        uint8_t checksumFlag = sfd >> 7;
+        if(magicnumber == ZSTD_SEEKABLE_MAGICNUMBER){
+            DEBUG("Seektable detected\n");
+            const uint8_t sfd = *((uint8_t*)(footer + 4));
+            const uint8_t checksumFlag = sfd >> 7;
 
-        /* check reserved bits */
-        if((sfd >> 2) & 0x1f){
-            DEBUG("Last frame checksumFlag= %x: Bits 3-7 should be zero. Ignoring malformed seektable.\n",(uint32_t)sfd);
-        }else{
-            uint32_t const numFrames = ZSTDSeek_fromLE32(*((uint32_t *)footer));
-            uint32_t const sizePerEntry = 8 + (checksumFlag ? 4 : 0);
-            uint32_t const tableSize = sizePerEntry * numFrames;
-            uint32_t const frameSize = tableSize + ZSTD_SEEK_TABLE_FOOTER_SIZE + ZSTD_SKIPPABLE_HEADER_SIZE;
-
-            uint8_t *frame = (uint8_t *)buff + (size - frameSize);
-            uint32_t skippableHeader = ZSTDSeek_fromLE32(*((uint32_t *)frame));
-            if(skippableHeader != (ZSTD_MAGIC_SKIPPABLE_START|0xE)){
-                DEBUG("Last frame Header = %u does not match magic number %u. Ignoring malformed seektable.\n", skippableHeader, (ZSTD_MAGIC_SKIPPABLE_START|0xE));
+            /* check reserved bits */
+            if((sfd >> 2) & 0x1f){
+                DEBUG("Last frame checksumFlag= %x: Bits 3-7 should be zero. Ignoring malformed seektable.\n",(uint32_t)sfd);
             }else{
-                uint32_t _frameSize = ZSTDSeek_fromLE32(*((uint32_t *)(frame + 4)));
-                if(_frameSize + ZSTD_SKIPPABLE_HEADER_SIZE != frameSize){
-                    DEBUG("Last frame size = %u does not match expected size = %u. Ignoring malformed seektable.\n", _frameSize + ZSTD_SKIPPABLE_HEADER_SIZE, frameSize);
-                }else{
-                    uint8_t *table = frame + ZSTD_SKIPPABLE_HEADER_SIZE;
-                    size_t cOffset = 0;
-                    size_t dOffset = 0;
-                    for(uint32_t i = 0; i < numFrames; i++){
-                        ZSTDSeek_addJumpTableRecord(sctx->jt, cOffset, dOffset);
-                        cOffset += ZSTDSeek_fromLE32(*((uint32_t *)(table + (i * sizePerEntry))));
-                        dOffset += ZSTDSeek_fromLE32(*((uint32_t *)(table + (i * sizePerEntry) + 4)));
-                    }
-                    ZSTDSeek_addJumpTableRecord(sctx->jt, cOffset, dOffset);
+                const uint32_t numFrames = ZSTDSeek_fromLE32(*((uint32_t *)footer));
+                const uint32_t sizePerEntry = 8 + (checksumFlag ? 4 : 0);
 
-                    sctx->jumpTableFullyInitialized = 1;
-                    return 0;
+                /* Guard against uint32_t overflow in tableSize = sizePerEntry * numFrames.
+                 * Max valid numFrames is limited by the buffer size available for entries. */
+                const size_t maxEntries = (size - ZSTD_SEEK_TABLE_FOOTER_SIZE - ZSTD_SKIPPABLE_HEADER_SIZE) / sizePerEntry;
+                if(numFrames > maxEntries){
+                    DEBUG("Seektable numFrames (%u) too large for buffer. Ignoring malformed seektable.\n", numFrames);
+                }else{
+                    const uint32_t tableSize = sizePerEntry * numFrames;
+                    const uint32_t frameSize = tableSize + ZSTD_SEEK_TABLE_FOOTER_SIZE + ZSTD_SKIPPABLE_HEADER_SIZE;
+
+                    if(frameSize > size){
+                        DEBUG("Seektable frame size (%u) exceeds buffer size (%zu). Ignoring malformed seektable.\n", frameSize, size);
+                    }else{
+                        uint8_t *frame = (uint8_t *)buff + (size - frameSize);
+                        const uint32_t skippableHeader = ZSTDSeek_fromLE32(*((uint32_t *)frame));
+                        if(skippableHeader != (ZSTD_MAGIC_SKIPPABLE_START|0xE)){
+                            DEBUG("Last frame Header = %u does not match magic number %u. Ignoring malformed seektable.\n", skippableHeader, (ZSTD_MAGIC_SKIPPABLE_START|0xE));
+                        }else{
+                            const uint32_t _frameSize = ZSTDSeek_fromLE32(*((uint32_t *)(frame + 4)));
+                            if(_frameSize + ZSTD_SKIPPABLE_HEADER_SIZE != frameSize){
+                                DEBUG("Last frame size = %u does not match expected size = %u. Ignoring malformed seektable.\n", _frameSize + ZSTD_SKIPPABLE_HEADER_SIZE, frameSize);
+                            }else{
+                                uint8_t *table = frame + ZSTD_SKIPPABLE_HEADER_SIZE;
+                                size_t cOffset = 0;
+                                size_t dOffset = 0;
+                                for(uint32_t i = 0; i < numFrames; i++){
+                                    ZSTDSeek_addJumpTableRecord(sctx->jt, cOffset, dOffset);
+                                    cOffset += ZSTDSeek_fromLE32(*((uint32_t *)(table + (i * sizePerEntry))));
+                                    dOffset += ZSTDSeek_fromLE32(*((uint32_t *)(table + (i * sizePerEntry) + 4)));
+                                }
+                                ZSTDSeek_addJumpTableRecord(sctx->jt, cOffset, dOffset);
+
+                                sctx->jumpTableFullyInitialized = 1;
+                                return 0;
+                            }
+                        }
+                    }
                 }
             }
         }
-    }
+    } /* size >= ZSTD_SEEK_TABLE_FOOTER_SIZE */
 
     size_t frameCompressedSize;
     size_t compressedPos = 0;
@@ -193,14 +216,20 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
     }
 
     buff = (uint8_t *)sctx->buff + compressedPos;
+    if (compressedPos > size) {
+        DEBUG("Compressed position exceeds buffer size\n");
+        return -1;
+    }
+    size -= compressedPos; /* size now tracks remaining bytes from buff onwards */
 
     sctx->jumpTableFullyInitialized = 1;
 
-    while ((frameCompressedSize = ZSTD_findFrameCompressedSize(buff, size))>0 && !ZSTD_isError(frameCompressedSize)) {
-        uint32_t const magic = ZSTDSeek_fromLE32(*((uint32_t *)buff));
+    while (size > 0 && (frameCompressedSize = ZSTD_findFrameCompressedSize(buff, size))>0 && !ZSTD_isError(frameCompressedSize)) {
+        const uint32_t magic = ZSTDSeek_fromLE32(*((uint32_t *)buff));
         if((magic & ZSTD_MAGIC_SKIPPABLE_MASK) == ZSTD_MAGIC_SKIPPABLE_START){
             compressedPos += frameCompressedSize;
             buff = (uint8_t *)buff + frameCompressedSize;
+            size -= frameCompressedSize;
             continue;
         }
 
@@ -213,8 +242,8 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
             frameContentSize = 0;
 
             ZSTD_DCtx *dctx = ZSTD_createDCtx();
-            size_t const buffOutSize = ZSTD_DStreamOutSize();
-            void*  const buffOut = malloc(buffOutSize);
+            const size_t buffOutSize = ZSTD_DStreamOutSize();
+            void* buffOut = malloc(buffOutSize);
             size_t lastRet = 0;
             void *buffIn = buff;
 
@@ -242,6 +271,7 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
         compressedPos += frameCompressedSize;
         uncompressedPos += frameContentSize;
         buff = (uint8_t *)buff + frameCompressedSize;
+        size -= frameCompressedSize;
 
         if(uncompressedPos >= upUntilPos){
             sctx->jumpTableFullyInitialized = 0;
@@ -259,21 +289,25 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
     }
 }
 
-int ZSTDSeek_jumpTableIsInitialized(ZSTDSeek_Context *sctx){
+int ZSTDSeek_jumpTableIsInitialized(const ZSTDSeek_Context *sctx){
     return sctx->jumpTableFullyInitialized;
 }
 
-ZSTDSeek_JumpCoordinate ZSTDSeek_getJumpCoordinate(ZSTDSeek_Context *sctx, size_t uncompressedPos) {
+ZSTDSeek_JumpCoordinate ZSTDSeek_getJumpCoordinate(ZSTDSeek_Context *sctx, const size_t uncompressedPos) {
     if(!sctx->jumpTableFullyInitialized && (sctx->jt->length == 0 || sctx->jt->records[sctx->jt->length-1].uncompressedPos <= uncompressedPos)){
         ZSTDSeek_initializeJumpTableUpUntilPos(sctx, uncompressedPos);
     }
 
     //search for the greater value of m where sctx->jt->records[m].uncompressedPos <= uncompressedPos
+    if(sctx->jt->length == 0){
+        return (ZSTDSeek_JumpCoordinate){0, uncompressedPos, (ZSTDSeek_JumpTableRecord){0, 0}};
+    }
     uint64_t l = 0;
     uint64_t r = sctx->jt->length - 1;
     while(l <= r){
-        uint64_t m = (l+r)/2;
+        const uint64_t m = (l+r)/2;
         if(sctx->jt->records[m].uncompressedPos > uncompressedPos){
+            if(m == 0) break;
             r = m-1;
         }else if((m+1) < sctx->jt->length && sctx->jt->records[m+1].uncompressedPos <= uncompressedPos){
             l = m+1;
@@ -298,7 +332,7 @@ ZSTDSeek_Context* ZSTDSeek_createFromFileWithoutJumpTable(const char* file){
     struct stat st;
     stat(file, &st);
 
-    int fd = open(file, O_RDONLY, 0);
+    const int fd = open(file, O_RDONLY, 0);
     if(fd < 0){
         DEBUG("Unable to open '%s'\n", file);
         return NULL;
@@ -332,8 +366,8 @@ ZSTDSeek_Context* ZSTDSeek_createFromFile(const char* file){
     return sctx;
 }
 
-ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptorWithoutJumpTable(int fd){
-    size_t size = lseek(fd,0L,SEEK_END);
+ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptorWithoutJumpTable(const int fd){
+    const size_t size = lseek(fd,0L,SEEK_END);
 
     void* const buff = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
     if(buff == MAP_FAILED){
@@ -353,7 +387,7 @@ ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptorWithoutJumpTable(int fd){
     }
 }
 
-ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptor(int fd){
+ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptor(const int fd){
     ZSTDSeek_Context* sctx = ZSTDSeek_createFromFileDescriptorWithoutJumpTable(fd);
     if(sctx && ZSTDSeek_initializeJumpTable(sctx)!=0){
         DEBUG("Can't initialize the jump table\n");
@@ -363,7 +397,7 @@ ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptor(int fd){
     return sctx;
 }
 
-ZSTDSeek_Context* ZSTDSeek_createWithoutJumpTable(void *buff, size_t size){
+ZSTDSeek_Context* ZSTDSeek_createWithoutJumpTable(void *buff, const size_t size){
     ZSTD_DCtx *dctx = ZSTD_createDCtx();
 
     ZSTDSeek_Context* sctx = malloc(sizeof(ZSTDSeek_Context));
@@ -405,7 +439,7 @@ ZSTDSeek_Context* ZSTDSeek_createWithoutJumpTable(void *buff, size_t size){
     return sctx;
 }
 
-ZSTDSeek_Context* ZSTDSeek_create(void *buff, size_t size){
+ZSTDSeek_Context* ZSTDSeek_create(void *buff, const size_t size){
     ZSTDSeek_Context* sctx = ZSTDSeek_createWithoutJumpTable(buff, size);
     if(sctx && ZSTDSeek_initializeJumpTable(sctx)!=0){
         DEBUG("Can't initialize the jump table\n");
@@ -415,24 +449,24 @@ ZSTDSeek_Context* ZSTDSeek_create(void *buff, size_t size){
     return sctx;
 }
 
-size_t ZSTDSeek_read(void *outBuff, size_t outBuffSize, ZSTDSeek_Context *sctx){
+size_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context *sctx){
     if(!sctx){
         DEBUG("ZSTDSeek_Context is NULL\n");
         return 0;
     }
     
-    ZSTDSeek_JumpCoordinate localJc = ZSTDSeek_getJumpCoordinate(sctx, sctx->currentUncompressedPos); //trigger the generation of a jump table record, if needed
+    const ZSTDSeek_JumpCoordinate localJc = ZSTDSeek_getJumpCoordinate(sctx, sctx->currentUncompressedPos); //trigger the generation of a jump table record, if needed
     sctx->currentCompressedPos = localJc.jtr.compressedPos;
 
-    size_t maxReadable = ZSTDSeek_lastKnownUncompressedFileSize(sctx) - sctx->currentUncompressedPos;
+    const size_t maxReadable = ZSTDSeek_lastKnownUncompressedFileSize(sctx) - sctx->currentUncompressedPos;
     size_t toRead = maxReadable < outBuffSize ? maxReadable : outBuffSize;
-    size_t shouldRead = toRead;
+    const size_t shouldRead = toRead;
 
     if(sctx->tmpOutBuffPos < sctx->output.pos){
         if(sctx->jc.uncompressedOffset > sctx->output.pos){
             sctx->jc.uncompressedOffset -= sctx->output.pos;
         }else{
-            size_t maxCopy = (sctx->output.pos - sctx->tmpOutBuffPos) - sctx->jc.uncompressedOffset;
+            const size_t maxCopy = (sctx->output.pos - sctx->tmpOutBuffPos) - sctx->jc.uncompressedOffset;
             size_t toCopy = maxCopy < toRead ? maxCopy : toRead;
 
             memcpy(outBuff, sctx->tmpOutBuff+sctx->tmpOutBuffPos+sctx->jc.uncompressedOffset, toCopy);
@@ -444,15 +478,25 @@ size_t ZSTDSeek_read(void *outBuff, size_t outBuffSize, ZSTDSeek_Context *sctx){
         }
     }
 
-    while (toRead > 0 && ((sctx->input.pos < sctx->input.size) || (sctx->lastFrameCompressedSize = ZSTD_findFrameCompressedSize(sctx->inBuff, sctx->size)) > 0)){
-        if(sctx->input.pos == sctx->input.size){
+    while(toRead > 0){
+        if(sctx->input.pos >= sctx->input.size){
+            /* Compute remaining bytes from inBuff to end of buffer */
+            const size_t consumed = (size_t)((uint8_t *)sctx->inBuff - (uint8_t *)sctx->buff);
+            const size_t remaining = (consumed < sctx->size) ? sctx->size - consumed : 0;
+            if(remaining == 0){
+                break;
+            }
+            sctx->lastFrameCompressedSize = ZSTD_findFrameCompressedSize(sctx->inBuff, remaining);
+            if(ZSTD_isError(sctx->lastFrameCompressedSize) || sctx->lastFrameCompressedSize == 0){
+                break;
+            }
             sctx->input = (ZSTD_inBuffer){sctx->inBuff, sctx->lastFrameCompressedSize, 0};
         }
 
-        while (sctx->input.pos < sctx->input.size) {
+        while(sctx->input.pos < sctx->input.size){
             sctx->output = (ZSTD_outBuffer){ sctx->tmpOutBuff, sctx->tmpOutBuffSize, 0 };
             sctx->tmpOutBuffPos = 0;
-            size_t const ret = ZSTD_decompressStream(sctx->dctx, &sctx->output , &sctx->input);
+            const size_t ret = ZSTD_decompressStream(sctx->dctx, &sctx->output , &sctx->input);
 
             if(ZSTD_isError(ret)){
                 DEBUG("Error decompressing: %s\n", ZSTD_getErrorName(ret));
@@ -464,7 +508,7 @@ size_t ZSTDSeek_read(void *outBuff, size_t outBuffSize, ZSTDSeek_Context *sctx){
             if(sctx->jc.uncompressedOffset > sctx->output.pos){
                 sctx->jc.uncompressedOffset -= sctx->output.pos;
             }else{
-                size_t maxCopy = (sctx->output.pos - sctx->tmpOutBuffPos) - sctx->jc.uncompressedOffset;
+                const size_t maxCopy = (sctx->output.pos - sctx->tmpOutBuffPos) - sctx->jc.uncompressedOffset;
                 size_t toCopy = maxCopy < toRead ? maxCopy : toRead;
 
                 memcpy(outBuff, sctx->tmpOutBuff+sctx->tmpOutBuffPos+sctx->jc.uncompressedOffset, toCopy);
@@ -523,7 +567,7 @@ int ZSTDSeek_seek(ZSTDSeek_Context *sctx, long offset, int origin){
             return 0;
         }
 
-        ZSTDSeek_JumpCoordinate new_jc = ZSTDSeek_getJumpCoordinate(sctx, offset);
+        const ZSTDSeek_JumpCoordinate new_jc = ZSTDSeek_getJumpCoordinate(sctx, offset);
 
         if(sctx->jc.compressedOffset != new_jc.compressedOffset || offset < sctx->currentUncompressedPos){ //reset
             ZSTD_DCtx_reset(sctx->dctx, ZSTD_reset_session_only);
@@ -540,12 +584,16 @@ int ZSTDSeek_seek(ZSTDSeek_Context *sctx, long offset, int origin){
         }else{ //move forward
             size_t toSkipTotal = offset - sctx->currentUncompressedPos;
 
-            size_t const buffOutSize = ZSTD_DStreamOutSize();
-            void*  const buffOut = malloc(buffOutSize);
+            const size_t buffOutSize = ZSTD_DStreamOutSize();
+            void* buffOut = malloc(buffOutSize);
 
             while(toSkipTotal>0){
-                size_t toSkip = buffOutSize < toSkipTotal ? buffOutSize : toSkipTotal;
-                toSkipTotal -= ZSTDSeek_read(buffOut, toSkip, sctx);
+                const size_t toSkip = buffOutSize < toSkipTotal ? buffOutSize : toSkipTotal;
+                const size_t bytesRead = ZSTDSeek_read(buffOut, toSkip, sctx);
+                if (bytesRead == 0 || bytesRead > toSkip){
+                    break; /* no progress or error */
+                }
+                toSkipTotal -= bytesRead;
             }
 
             free(buffOut);
@@ -564,7 +612,7 @@ long ZSTDSeek_tell(ZSTDSeek_Context *sctx){
         return -1;
     }
 
-    return sctx->currentUncompressedPos;
+    return (long)sctx->currentUncompressedPos;
 }
 
 long ZSTDSeek_compressedTell(ZSTDSeek_Context *sctx){
@@ -573,7 +621,7 @@ long ZSTDSeek_compressedTell(ZSTDSeek_Context *sctx){
         return -1;
     }
 
-    return sctx->currentCompressedPos;
+    return (long)sctx->currentCompressedPos;
 }
 
 size_t ZSTDSeek_uncompressedFileSize(ZSTDSeek_Context *sctx){
@@ -596,11 +644,11 @@ size_t ZSTDSeek_lastKnownUncompressedFileSize(ZSTDSeek_Context *sctx){
     return sctx->jt->length > 0 ? sctx->jt->records[sctx->jt->length-1].uncompressedPos : 0;
 }
 
-int ZSTDSeek_fileno(ZSTDSeek_Context *sctx){
+int ZSTDSeek_fileno(const ZSTDSeek_Context *sctx){
     return sctx->mmap_fd;
 }
 
-size_t ZSTDSeek_countFramesUpTo(ZSTDSeek_Context *sctx, size_t upTo){
+size_t ZSTDSeek_countFramesUpTo(ZSTDSeek_Context *sctx, const size_t upTo){
     if(!sctx){
         DEBUG("ZSTDSeek_Context is NULL\n");
         return 0;
@@ -609,7 +657,7 @@ size_t ZSTDSeek_countFramesUpTo(ZSTDSeek_Context *sctx, size_t upTo){
     size_t frameCompressedSize;
 
     void *buff = sctx->buff;
-    size_t size = sctx->size;
+    const size_t size = sctx->size;
 
     size_t counter = 0;
 
