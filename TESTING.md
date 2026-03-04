@@ -12,7 +12,7 @@ The test suite exercises libzstd-seek across four dimensions:
 | **Memory safety** | AddressSanitizer + UBSanitizer | buffer overflows, use-after-free, undefined behaviour |
 | **Code coverage** | LLVM coverage + llvm-cov       | dead or untested code paths                           |
 
-71 tests in total: 11 round-trip, 37 API, 10 error-path, and 13 reference comparison tests.
+74 tests in total: 11 round-trip, 40 API, 10 error-path, and 13 reference comparison tests.
 All build configurations run the same test suite.
 
 ---
@@ -148,23 +148,26 @@ bash ../tests/test_coverage.sh ../build_cov
 
 ### API tests — info and read patterns
 
-| Test                    | What is covered                                |
-|-------------------------|------------------------------------------------|
-| `api_file_size`         | `uncompressedFileSize`                         |
-| `api_last_known_size`   | `lastKnownUncompressedFileSize` progression    |
-| `api_frame_count`       | `getNumberOfFrames`                            |
-| `api_is_multiframe`     | `isMultiframe` for multi and single frame      |
-| `api_fileno`            | `fileno` returns valid fd                      |
-| `api_compressed_tell`   | `compressedTell` coherence                     |
-| `api_read_byte_by_byte` | sequential 1-byte reads                        |
-| `api_read_chunks`       | chunked reads with verification                |
-| `api_frame_boundary`    | read spanning frame boundary                   |
-| `api_single_frame`      | single-frame file operations                   |
-| `api_large_read`        | read buffer larger than file                   |
-| `api_read_too_much`     | request 2× file size from pos 0, short read    |
-| `api_seek_cur_zero`     | `seek(0, SEEK_CUR)` no-op at start/mid/eof     |
-| `api_seek_to_same_pos`  | seek to current position (non-zero) twice      |
-| `api_fileno_buffer`     | `fileno` returns -1 for buffer-created context |
+| Test                       | What is covered                                                  |
+|----------------------------|------------------------------------------------------------------|
+| `api_file_size`            | `uncompressedFileSize`                                           |
+| `api_last_known_size`      | `lastKnownUncompressedFileSize` progression                      |
+| `api_frame_count`          | `getNumberOfFrames`                                              |
+| `api_is_multiframe`        | `isMultiframe` for multi and single frame                        |
+| `api_fileno`               | `fileno` returns valid fd                                        |
+| `api_compressed_tell`      | `compressedTell` coherence                                       |
+| `api_compressed_tell_mono` | `compressedTell` never decreases during 10-byte sequential reads |
+| `api_compressed_tell_seek` | `compressedTell` matches JT at frame boundaries after seek       |
+| `api_seek_forward_large`   | `seek(+500, SEEK_CUR)` within frame, data verified vs raw        |
+| `api_read_byte_by_byte`    | sequential 1-byte reads                                          |
+| `api_read_chunks`          | chunked reads with verification                                  |
+| `api_frame_boundary`       | read spanning frame boundary                                     |
+| `api_single_frame`         | single-frame file operations                                     |
+| `api_large_read`           | read buffer larger than file                                     |
+| `api_read_too_much`        | request 2× file size from pos 0, short read                      |
+| `api_seek_cur_zero`        | `seek(0, SEEK_CUR)` no-op at start/mid/eof                       |
+| `api_seek_to_same_pos`     | seek to current position (non-zero) twice                        |
+| `api_fileno_buffer`        | `fileno` returns -1 for buffer-created context                   |
 
 ### Error paths
 
@@ -186,13 +189,13 @@ bash ../tests/test_coverage.sh ../build_cov
 ## Coverage results
 
 Current numbers for `zstd-seek.c` measured on macOS Apple Silicon with all
-71 tests (Debug, LLVM coverage build):
+74 tests (Debug, LLVM coverage build):
 
-| Metric        | Value        |
-|---------------|--------------|
-| **Functions** | 27/27 (100%) |
-| **Lines**     | 456/512 (89%)|
-| **Branches**  | 215/274 (78%)|
+| Metric        | Value         |
+|---------------|---------------|
+| **Functions** | 27/27 (100%)  |
+| **Lines**     | 456/512 (89%) |
+| **Branches**  | 215/274 (78%) |
 
 Re-run `tests/test_coverage.sh` after changes to get exact figures.
 
