@@ -46,6 +46,7 @@ do { \
  */
 #define ZSTDSEEK_ERR_NEGATIVE_SEEK (-1)
 #define ZSTDSEEK_ERR_BEYOND_END_SEEK (-2)
+#define ZSTDSEEK_ERR_READ (-3)
 /** @} */
 
 /** @name Seekable format constants
@@ -283,9 +284,10 @@ ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptor(int fd);
  * @param outBuff     Destination buffer (must be at least @p outBuffSize bytes).
  * @param outBuffSize Maximum number of bytes to read.
  * @param sctx        Context to read from.
- * @return Number of bytes actually read (0 at EOF or on error).
+ * @return Number of bytes actually read (0 at EOF), or a negative error
+ *         code (@ref ZSTDSEEK_ERR_READ) on decompression failure.
  */
-size_t ZSTDSeek_read(void *outBuff, size_t outBuffSize, ZSTDSeek_Context *sctx);
+int64_t ZSTDSeek_read(void *outBuff, size_t outBuffSize, ZSTDSeek_Context *sctx);
 
 /**
  * Seek to a position in the uncompressed stream.
@@ -303,6 +305,8 @@ size_t ZSTDSeek_read(void *outBuff, size_t outBuffSize, ZSTDSeek_Context *sctx);
  *         @ref ZSTDSEEK_ERR_NEGATIVE_SEEK if the resolved position is negative,
  *         @ref ZSTDSEEK_ERR_BEYOND_END_SEEK if the resolved position exceeds
  *         the uncompressed file size,
+ *         @ref ZSTDSEEK_ERR_READ if a forward skip fails due to a
+ *         decompression or stream error,
  *         or -1 for any other error (e.g. @c NULL context, invalid origin).
  */
 int ZSTDSeek_seek(ZSTDSeek_Context *sctx, long offset, int origin);

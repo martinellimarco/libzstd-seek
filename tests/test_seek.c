@@ -12,6 +12,7 @@
  */
 
 #include <fcntl.h>
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -98,9 +99,9 @@ static int test_read_all(int argc, char *argv[]) {
     }
 
     uint8_t *buf = malloc(file_size);
-    size_t nread = ZSTDSeek_read(buf, file_size, ctx);
-    if (nread != file_size) {
-        FAIL("read returned %zu, expected %zu", nread, file_size);
+    int64_t nread = ZSTDSeek_read(buf, file_size, ctx);
+    if (nread != (int64_t)file_size) {
+        FAIL("read returned %" PRId64 ", expected %zu", nread, file_size);
         free(buf); ZSTDSeek_free(ctx); free(raw); return 1;
     }
 
@@ -137,9 +138,9 @@ static int test_read_byte_by_byte(int argc, char *argv[]) {
 
     for (size_t i = 0; i < raw_size; i++) {
         uint8_t byte;
-        size_t n = ZSTDSeek_read(&byte, 1, ctx);
+        int64_t n = ZSTDSeek_read(&byte, 1, ctx);
         if (n != 1) {
-            FAIL("read returned %zu at byte %zu (expected 1)", n, i);
+            FAIL("read returned %" PRId64 " at byte %zu (expected 1)", n, i);
             ZSTDSeek_free(ctx); free(raw); return 1;
         }
         if (byte != raw[i]) {
@@ -150,9 +151,9 @@ static int test_read_byte_by_byte(int argc, char *argv[]) {
 
     /* Read past EOF should return 0 */
     uint8_t extra;
-    size_t n = ZSTDSeek_read(&extra, 1, ctx);
+    int64_t n = ZSTDSeek_read(&extra, 1, ctx);
     if (n != 0) {
-        FAIL("expected 0 bytes at EOF, got %zu", n);
+        FAIL("expected 0 bytes at EOF, got %" PRId64, n);
         ZSTDSeek_free(ctx); free(raw); return 1;
     }
 
@@ -181,13 +182,13 @@ static int test_read_chunks(int argc, char *argv[]) {
     size_t total = 0;
     while (total < raw_size) {
         size_t want = (raw_size - total < chunk) ? raw_size - total : chunk;
-        size_t n = ZSTDSeek_read(buf, want, ctx);
+        int64_t n = ZSTDSeek_read(buf, want, ctx);
         if (n == 0) { FAIL("unexpected EOF at %zu", total); free(buf); ZSTDSeek_free(ctx); free(raw); return 1; }
-        if (memcmp(buf, raw + total, n) != 0) {
+        if (memcmp(buf, raw + total, (size_t)n) != 0) {
             FAIL("data mismatch in chunk at offset %zu", total);
             free(buf); ZSTDSeek_free(ctx); free(raw); return 1;
         }
-        total += n;
+        total += (size_t)n;
     }
 
     PASS("read_chunks: %zu bytes in %zu-byte chunks", total, chunk);
@@ -217,8 +218,8 @@ static int test_seek_set_sequential(int argc, char *argv[]) {
         if (tell != (long)pos) { FAIL("tell=%ld expected=%zu", tell, pos); ZSTDSeek_free(ctx); free(raw); return 1; }
 
         uint8_t byte;
-        size_t n = ZSTDSeek_read(&byte, 1, ctx);
-        if (n != 1) { FAIL("read at pos %zu returned %zu", pos, n); ZSTDSeek_free(ctx); free(raw); return 1; }
+        int64_t n = ZSTDSeek_read(&byte, 1, ctx);
+        if (n != 1) { FAIL("read at pos %zu returned %" PRId64, pos, n); ZSTDSeek_free(ctx); free(raw); return 1; }
         if (byte != raw[pos]) {
             FAIL("at pos %zu: got 0x%02x expected 0x%02x", pos, byte, raw[pos]);
             ZSTDSeek_free(ctx); free(raw); return 1;
@@ -377,8 +378,8 @@ static int test_seek_random(int argc, char *argv[]) {
             ZSTDSeek_free(ctx); free(raw); return 1;
         }
         uint8_t byte;
-        size_t n = ZSTDSeek_read(&byte, 1, ctx);
-        if (n != 1) { FAIL("read at pos %zu returned %zu", pos, n); ZSTDSeek_free(ctx); free(raw); return 1; }
+        int64_t n = ZSTDSeek_read(&byte, 1, ctx);
+        if (n != 1) { FAIL("read at pos %zu returned %" PRId64, pos, n); ZSTDSeek_free(ctx); free(raw); return 1; }
         if (byte != raw[pos]) {
             FAIL("op %zu: pos=%zu got 0x%02x expected 0x%02x", i, pos, byte, raw[pos]);
             ZSTDSeek_free(ctx); free(raw); return 1;
@@ -429,8 +430,8 @@ static int test_create_from_file_no_jt(int argc, char *argv[]) {
     /* Read all and verify */
     size_t file_size = ZSTDSeek_uncompressedFileSize(ctx);
     uint8_t *buf = malloc(file_size);
-    size_t nread = ZSTDSeek_read(buf, file_size, ctx);
-    if (nread != raw_size || memcmp(buf, raw, raw_size) != 0) {
+    int64_t nread = ZSTDSeek_read(buf, file_size, ctx);
+    if (nread != (int64_t)raw_size || memcmp(buf, raw, raw_size) != 0) {
         FAIL("data verification failed");
         free(buf); ZSTDSeek_free(ctx); free(raw); return 1;
     }
@@ -455,8 +456,8 @@ static int test_create_from_buffer(int argc, char *argv[]) {
     if (!ctx) { FAIL("ZSTDSeek_create failed"); free(zst); free(raw); return 1; }
 
     uint8_t *buf = malloc(raw_size);
-    size_t nread = ZSTDSeek_read(buf, raw_size, ctx);
-    if (nread != raw_size || memcmp(buf, raw, raw_size) != 0) {
+    int64_t nread = ZSTDSeek_read(buf, raw_size, ctx);
+    if (nread != (int64_t)raw_size || memcmp(buf, raw, raw_size) != 0) {
         FAIL("data verification failed");
         free(buf); ZSTDSeek_free(ctx); free(zst); free(raw); return 1;
     }
@@ -483,8 +484,8 @@ static int test_create_from_buffer_no_jt(int argc, char *argv[]) {
     ZSTDSeek_initializeJumpTable(ctx);
 
     uint8_t *buf = malloc(raw_size);
-    size_t nread = ZSTDSeek_read(buf, raw_size, ctx);
-    if (nread != raw_size || memcmp(buf, raw, raw_size) != 0) {
+    int64_t nread = ZSTDSeek_read(buf, raw_size, ctx);
+    if (nread != (int64_t)raw_size || memcmp(buf, raw, raw_size) != 0) {
         FAIL("data verification failed");
         free(buf); ZSTDSeek_free(ctx); free(zst); free(raw); return 1;
     }
@@ -517,8 +518,8 @@ static int test_create_from_fd(int argc, char *argv[]) {
     }
 
     uint8_t *buf = malloc(raw_size);
-    size_t nread = ZSTDSeek_read(buf, raw_size, ctx);
-    if (nread != raw_size || memcmp(buf, raw, raw_size) != 0) {
+    int64_t nread = ZSTDSeek_read(buf, raw_size, ctx);
+    if (nread != (int64_t)raw_size || memcmp(buf, raw, raw_size) != 0) {
         FAIL("data verification failed");
         free(buf); ZSTDSeek_free(ctx); free(raw); return 1;
     }
@@ -547,8 +548,8 @@ static int test_create_from_fd_no_jt(int argc, char *argv[]) {
     ZSTDSeek_initializeJumpTable(ctx);
 
     uint8_t *buf = malloc(raw_size);
-    size_t nread = ZSTDSeek_read(buf, raw_size, ctx);
-    if (nread != raw_size || memcmp(buf, raw, raw_size) != 0) {
+    int64_t nread = ZSTDSeek_read(buf, raw_size, ctx);
+    if (nread != (int64_t)raw_size || memcmp(buf, raw, raw_size) != 0) {
         FAIL("data verification failed");
         free(buf); ZSTDSeek_free(ctx); free(raw); return 1;
     }
@@ -846,10 +847,10 @@ static int test_compressed_tell_monotonic(int argc, char *argv[]) {
     size_t total_read = 0;
     size_t reads = 0;
     uint8_t buf[10];
-    size_t n;
+    int64_t n;
 
     while ((n = ZSTDSeek_read(buf, sizeof(buf), ctx)) > 0) {
-        total_read += n;
+        total_read += (size_t)n;
         reads++;
         long ct = ZSTDSeek_compressedTell(ctx);
         if (ct < prev_ct) {
@@ -913,9 +914,9 @@ static int test_compressed_tell_seek(int argc, char *argv[]) {
 
         /* Read 1 byte — compressedTell must not go below frame start */
         uint8_t byte;
-        size_t n = ZSTDSeek_read(&byte, 1, ctx);
+        int64_t n = ZSTDSeek_read(&byte, 1, ctx);
         if (n != 1) {
-            FAIL("frame %llu: read returned %zu", (unsigned long long)i, n);
+            FAIL("frame %llu: read returned %" PRId64, (unsigned long long)i, n);
             ZSTDSeek_free(ctx);
             return 1;
         }
@@ -942,7 +943,7 @@ static int test_compressed_tell_seek(int argc, char *argv[]) {
     /* Part 3: Sequential read-through, verify monotonic */
     long prev_ct = 0;
     uint8_t buf[10];
-    size_t n;
+    int64_t n;
     while ((n = ZSTDSeek_read(buf, sizeof(buf), ctx)) > 0) {
         long ct = ZSTDSeek_compressedTell(ctx);
         if (ct < prev_ct) {
@@ -998,7 +999,7 @@ static int test_seek_forward_large(int argc, char *argv[]) {
         }
 
         uint8_t byte;
-        size_t n = ZSTDSeek_read(&byte, 1, ctx);
+        int64_t n = ZSTDSeek_read(&byte, 1, ctx);
         if (n != 1 || byte != raw[frame_start]) {
             FAIL("frame %llu: first byte mismatch (got 0x%02x expected 0x%02x)",
                  (unsigned long long)i, byte, raw[frame_start]);
@@ -1072,18 +1073,18 @@ static int test_frame_boundary(int argc, char *argv[]) {
 
     /* Read 4 bytes that span the boundary */
     uint8_t buf[4];
-    size_t n = ZSTDSeek_read(buf, 4, ctx);
+    int64_t n = ZSTDSeek_read(buf, 4, ctx);
     size_t expected_n = (raw_size - seek_pos < 4) ? raw_size - seek_pos : 4;
-    if (n != expected_n) {
-        FAIL("cross-boundary read returned %zu expected %zu", n, expected_n);
+    if (n != (int64_t)expected_n) {
+        FAIL("cross-boundary read returned %" PRId64 " expected %zu", n, expected_n);
         ZSTDSeek_free(ctx); free(raw); return 1;
     }
-    if (memcmp(buf, raw + seek_pos, n) != 0) {
+    if (memcmp(buf, raw + seek_pos, (size_t)n) != 0) {
         FAIL("cross-boundary data mismatch at offset %zu", seek_pos);
         ZSTDSeek_free(ctx); free(raw); return 1;
     }
 
-    PASS("frame_boundary: read %zu bytes across boundary at %zu", n, boundary);
+    PASS("frame_boundary: read %" PRId64 " bytes across boundary at %zu", n, boundary);
     ZSTDSeek_free(ctx); free(raw);
     return 0;
 }
@@ -1131,8 +1132,8 @@ static int test_error_truncated(int argc, char *argv[]) {
     if (ctx) {
         /* If it creates, reads should fail or return short */
         char buf[1024];
-        size_t n = ZSTDSeek_read(buf, sizeof(buf), ctx);
-        INFO("truncated: create succeeded, read returned %zu", n);
+        int64_t n = ZSTDSeek_read(buf, sizeof(buf), ctx);
+        INFO("truncated: create succeeded, read returned %" PRId64, n);
         ZSTDSeek_free(ctx);
     } else {
         INFO("truncated: create correctly returned NULL");
@@ -1235,16 +1236,16 @@ static int test_error_read_past_eof(int argc, char *argv[]) {
 
     /* Try to read more than available */
     uint8_t buf[1024];
-    size_t n = ZSTDSeek_read(buf, sizeof(buf), ctx);
+    int64_t n = ZSTDSeek_read(buf, sizeof(buf), ctx);
     if (n != 1) {
-        FAIL("expected 1 byte at EOF-1, got %zu", n);
+        FAIL("expected 1 byte at EOF-1, got %" PRId64, n);
         ZSTDSeek_free(ctx); return 1;
     }
 
     /* Read again should return 0 */
     n = ZSTDSeek_read(buf, sizeof(buf), ctx);
     if (n != 0) {
-        FAIL("expected 0 bytes at EOF, got %zu", n);
+        FAIL("expected 0 bytes at EOF, got %" PRId64, n);
         ZSTDSeek_free(ctx); return 1;
     }
 
@@ -1308,8 +1309,8 @@ static int test_seek_cur_backward(int argc, char *argv[]) {
         }
 
         uint8_t byte;
-        size_t n = ZSTDSeek_read(&byte, 1, ctx);
-        if (n != 1) { FAIL("read at pos %ld returned %zu", pos, n); ZSTDSeek_free(ctx); free(raw); return 1; }
+        int64_t n = ZSTDSeek_read(&byte, 1, ctx);
+        if (n != 1) { FAIL("read at pos %ld returned %" PRId64, pos, n); ZSTDSeek_free(ctx); free(raw); return 1; }
         if (byte != raw[pos]) {
             FAIL("at pos %ld: got 0x%02x expected 0x%02x", pos, byte, raw[pos]);
             ZSTDSeek_free(ctx); free(raw); return 1;
@@ -1432,9 +1433,9 @@ static int test_read_too_much(int argc, char *argv[]) {
     if (!buf) { FAIL("malloc(%zu) failed", request); ZSTDSeek_free(ctx); free(raw); return 1; }
 
     /* First read: request 2× file size → short read of exactly file_size */
-    size_t n = ZSTDSeek_read(buf, request, ctx);
-    if (n != file_size) {
-        FAIL("expected short read of %zu, got %zu", file_size, n);
+    int64_t n = ZSTDSeek_read(buf, request, ctx);
+    if (n != (int64_t)file_size) {
+        FAIL("expected short read of %zu, got %" PRId64, file_size, n);
         free(buf); ZSTDSeek_free(ctx); free(raw); return 1;
     }
 
@@ -1450,9 +1451,9 @@ static int test_read_too_much(int argc, char *argv[]) {
     }
 
     /* Second read at EOF → 0 bytes */
-    size_t n2 = ZSTDSeek_read(buf, request, ctx);
+    int64_t n2 = ZSTDSeek_read(buf, request, ctx);
     if (n2 != 0) {
-        FAIL("expected 0 bytes at EOF, got %zu", n2);
+        FAIL("expected 0 bytes at EOF, got %" PRId64, n2);
         free(buf); ZSTDSeek_free(ctx); free(raw); return 1;
     }
 
@@ -1462,7 +1463,7 @@ static int test_read_too_much(int argc, char *argv[]) {
         free(buf); ZSTDSeek_free(ctx); free(raw); return 1;
     }
 
-    PASS("read_too_much: requested %zu, got %zu, tell=%ld, re-read=0", request, n, tell);
+    PASS("read_too_much: requested %zu, got %" PRId64 ", tell=%ld, re-read=0", request, n, tell);
     free(buf); ZSTDSeek_free(ctx); free(raw);
     return 0;
 }
@@ -1562,9 +1563,9 @@ static int test_jt_progressive_reads(int argc, char *argv[]) {
 
     /* Read 1 byte — should trigger JT growth (at least first frame discovered) */
     uint8_t byte;
-    size_t n = ZSTDSeek_read(&byte, 1, ctx);
+    int64_t n = ZSTDSeek_read(&byte, 1, ctx);
     if (n != 1 || byte != raw[0]) {
-        FAIL("first read: n=%zu byte=0x%02x expected=0x%02x", n, byte, raw[0]);
+        FAIL("first read: n=%" PRId64 " byte=0x%02x expected=0x%02x", n, byte, raw[0]);
         ZSTDSeek_free(ctx); free(raw); return 1;
     }
 
@@ -1590,7 +1591,7 @@ static int test_jt_progressive_reads(int argc, char *argv[]) {
                 FAIL("unexpected EOF at pos %zu during cross-frame read", current_pos + total_read);
                 free(buf); ZSTDSeek_free(ctx); free(raw); return 1;
             }
-            total_read += n;
+            total_read += (size_t)n;
         }
         if (memcmp(buf, raw + current_pos, remaining) != 0) {
             FAIL("cross-frame data mismatch");
@@ -1795,9 +1796,9 @@ static int test_seek_to_same_pos(int argc, char *argv[]) {
 
     /* Read one byte to verify position */
     uint8_t byte1;
-    size_t n = ZSTDSeek_read(&byte1, 1, ctx);
+    int64_t n = ZSTDSeek_read(&byte1, 1, ctx);
     if (n != 1 || byte1 != raw[target]) {
-        FAIL("read@%zu: n=%zu got=0x%02x expected=0x%02x", target, n, byte1, raw[target]);
+        FAIL("read@%zu: n=%" PRId64 " got=0x%02x expected=0x%02x", target, n, byte1, raw[target]);
         ZSTDSeek_free(ctx); free(raw); return 1;
     }
 
@@ -1809,7 +1810,7 @@ static int test_seek_to_same_pos(int argc, char *argv[]) {
     uint8_t byte2;
     n = ZSTDSeek_read(&byte2, 1, ctx);
     if (n != 1 || byte2 != raw[target]) {
-        FAIL("re-read@%zu: n=%zu got=0x%02x expected=0x%02x", target, n, byte2, raw[target]);
+        FAIL("re-read@%zu: n=%" PRId64 " got=0x%02x expected=0x%02x", target, n, byte2, raw[target]);
         ZSTDSeek_free(ctx); free(raw); return 1;
     }
 
@@ -1857,9 +1858,9 @@ static int test_seekable_malformed_footer(int argc, char *argv[]) {
     if (!ctx) {
         FAIL("(a) reserved bits: create failed"); failures++;
     } else {
-        size_t n = ZSTDSeek_read(out, raw_size, ctx);
-        if (n != raw_size || memcmp(out, raw, raw_size) != 0) {
-            FAIL("(a) reserved bits: data mismatch (n=%zu)", n); failures++;
+        int64_t n = ZSTDSeek_read(out, raw_size, ctx);
+        if (n != (int64_t)raw_size || memcmp(out, raw, raw_size) != 0) {
+            FAIL("(a) reserved bits: data mismatch (n=%" PRId64 ")", n); failures++;
         } else {
             PASS("(a) reserved bits: fallback to scanning OK");
         }
@@ -1889,9 +1890,9 @@ static int test_seekable_malformed_footer(int argc, char *argv[]) {
         if (!ctx) {
             FAIL("(b) bad skippable magic: create failed"); failures++;
         } else {
-            size_t n = ZSTDSeek_read(out, raw_size, ctx);
-            if (n != raw_size || memcmp(out, raw, raw_size) != 0) {
-                FAIL("(b) bad skippable magic: data mismatch (n=%zu)", n); failures++;
+            int64_t n = ZSTDSeek_read(out, raw_size, ctx);
+            if (n != (int64_t)raw_size || memcmp(out, raw, raw_size) != 0) {
+                FAIL("(b) bad skippable magic: data mismatch (n=%" PRId64 ")", n); failures++;
             } else {
                 PASS("(b) bad skippable magic: fallback to scanning OK");
             }
@@ -1920,9 +1921,9 @@ static int test_seekable_malformed_footer(int argc, char *argv[]) {
         if (!ctx) {
             FAIL("(c) bad frame size: create failed"); failures++;
         } else {
-            size_t n = ZSTDSeek_read(out, raw_size, ctx);
-            if (n != raw_size || memcmp(out, raw, raw_size) != 0) {
-                FAIL("(c) bad frame size: data mismatch (n=%zu)", n); failures++;
+            int64_t n = ZSTDSeek_read(out, raw_size, ctx);
+            if (n != (int64_t)raw_size || memcmp(out, raw, raw_size) != 0) {
+                FAIL("(c) bad frame size: data mismatch (n=%" PRId64 ")", n); failures++;
             } else {
                 PASS("(c) bad frame size: fallback to scanning OK");
             }

@@ -509,7 +509,7 @@ ZSTDSeek_Context* ZSTDSeek_create(void *buff, const size_t size){
     return sctx;
 }
 
-size_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context *sctx){
+int64_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context *sctx){
     if(!sctx){
         DEBUG("ZSTDSeek_Context is NULL\n");
         return 0;
@@ -573,7 +573,7 @@ size_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context *
                 DEBUG("Error decompressing: %s\n", ZSTD_getErrorName(ret));
                 sctx->currentCompressedPos =
                     (size_t)((uint8_t *)sctx->inBuff - (uint8_t *)sctx->buff) + sctx->input.pos;
-                return 0;
+                return ZSTDSEEK_ERR_READ;
             }
 
             {
@@ -673,14 +673,17 @@ int ZSTDSeek_seek(ZSTDSeek_Context *sctx, long offset, int origin){
 
             while(toSkipTotal>0){
                 const size_t toSkip = sizeof(discardBuf) < toSkipTotal ? sizeof(discardBuf) : toSkipTotal;
-                const size_t bytesRead = ZSTDSeek_read(discardBuf, toSkip, sctx);
-                if (bytesRead == 0 || bytesRead > toSkip){
-                    break; /* no progress or error */
+                const int64_t bytesRead = ZSTDSeek_read(discardBuf, toSkip, sctx);
+                if(bytesRead < 0){
+                    return ZSTDSEEK_ERR_READ; /* decompression error */
                 }
-                toSkipTotal -= bytesRead;
+                if(bytesRead == 0){
+                    break; /* no progress */
+                }
+                toSkipTotal -= (size_t)bytesRead;
             }
             if(toSkipTotal > 0){
-                return -1;
+                return ZSTDSEEK_ERR_READ;
             }
         }
     }else{
