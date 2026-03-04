@@ -205,15 +205,31 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const size_t 
                                 uint8_t *table = frame + ZSTD_SKIPPABLE_HEADER_SIZE;
                                 size_t cOffset = 0;
                                 size_t dOffset = 0;
+                                int seektable_ok = 1;
                                 for(uint32_t i = 0; i < numFrames; i++){
                                     ZSTDSeek_addJumpTableRecord(sctx->jt, cOffset, dOffset);
-                                    cOffset += load_le32(table + (i * sizePerEntry));
-                                    dOffset += load_le32(table + (i * sizePerEntry) + 4);
+                                    const uint32_t dc = load_le32(table + (i * sizePerEntry));
+                                    const uint32_t dd = load_le32(table + (i * sizePerEntry) + 4);
+                                    if(cOffset > SIZE_MAX - dc || dOffset > SIZE_MAX - dd){
+                                        DEBUG("Seektable offset overflow at entry %u. Ignoring malformed seektable.\n", i);
+                                        seektable_ok = 0;
+                                        break;
+                                    }
+                                    cOffset += dc;
+                                    dOffset += dd;
+                                    if(cOffset > sctx->size){
+                                        DEBUG("Seektable cOffset (%zu) exceeds buffer size (%zu). Ignoring malformed seektable.\n", cOffset, sctx->size);
+                                        seektable_ok = 0;
+                                        break;
+                                    }
                                 }
-                                ZSTDSeek_addJumpTableRecord(sctx->jt, cOffset, dOffset);
-
-                                sctx->jumpTableFullyInitialized = 1;
-                                return 0;
+                                if(seektable_ok){
+                                    ZSTDSeek_addJumpTableRecord(sctx->jt, cOffset, dOffset);
+                                    sctx->jumpTableFullyInitialized = 1;
+                                    return 0;
+                                }
+                                /* Malformed seektable: clear partial records, fall through to frame scan */
+                                sctx->jt->length = 0;
                             }
                         }
                     }
