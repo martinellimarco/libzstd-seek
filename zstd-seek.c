@@ -383,7 +383,6 @@ ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptorWithoutJumpTable(const int fd
         return sctx;
     }else{
         munmap(buff, size);
-        close(fd);
         return NULL;
     }
 }
