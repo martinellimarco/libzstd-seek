@@ -341,6 +341,7 @@ ZSTDSeek_Context* ZSTDSeek_createFromFileWithoutJumpTable(const char* file){
     void* const buff = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
     if(buff == MAP_FAILED){
         DEBUG("Unable to mmap '%s'\n",  file);
+        close(fd);
         return NULL;
     }
 
