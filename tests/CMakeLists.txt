@@ -34,6 +34,24 @@ function(add_roundtrip_test name seed num_frames frame_size)
     set_tests_properties(${name} PROPERTIES TIMEOUT 120 SKIP_RETURN_CODE 77)
 endfunction()
 
+# ── helper: register a reference comparison test (library vs zstd CLI) ───────
+# add_reference_test(name SEED NUM_FRAMES FRAME_SIZE [GEN_FLAGS...])
+function(add_reference_test name seed num_frames frame_size)
+    add_test(
+        NAME    ${name}
+        COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test_reference.sh
+                    $<TARGET_FILE:test_seek>
+                    $<TARGET_FILE:gen_seekable>
+                    ${BLOBS_DIR}
+                    ${seed}
+                    ${num_frames}
+                    ${frame_size}
+                    ${ARGN}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
+    set_tests_properties(${name} PROPERTIES TIMEOUT 120 SKIP_RETURN_CODE 77)
+endfunction()
+
 # ── helper: register an API test ─────────────────────────────────────────────
 function(add_api_test name test_id)
     add_test(
@@ -162,6 +180,21 @@ add_error_test(err_read_past_eof          error_read_past_eof)
 add_error_test(err_corrupted_header       error_corrupted_header)
 add_error_test(err_mixed_format           error_mixed_format)
 
+# ── Reference comparison tests (library vs zstd CLI) ────────────────────────
+add_reference_test(ref_4frames_seekable              1   4     1024    --seekable)
+add_reference_test(ref_4frames_no_seekable           2   4     1024)
+add_reference_test(ref_100frames_seekable            3   100   1000    --seekable)
+add_reference_test(ref_100frames_no_seekable         4   100   1000)
+add_reference_test(ref_single_frame                  5   1     65536)
+add_reference_test(ref_single_frame_seekable         6   1     65536   --seekable)
+add_reference_test(ref_large_frames                  7   10    1048576)
+add_reference_test(ref_no_content_size               8   4     1024    --no-content-size)
+add_reference_test(ref_vary_size                     9   10    10000   --seekable  --vary-size)
+add_reference_test(ref_seekable_checksum            10   4     1024    --seekable  --checksum)
+add_reference_test(ref_100frames_no_content_size    11   100   1000    --no-content-size)
+add_reference_test(ref_many_small_frames            12   500   64      --seekable)
+add_reference_test(ref_many_small_no_seekable       13   500   64)
+
 # ── Apply COVERAGE / SANITIZE env vars to all tests ──────────────────────────
 foreach(tname
     rt_4frames_seekable rt_4frames_no_seekable
@@ -189,6 +222,13 @@ foreach(tname
     err_null err_empty_file err_truncated err_invalid_format
     err_seek_negative err_seek_beyond
     err_seek_invalid_origin err_read_past_eof
-    err_corrupted_header err_mixed_format)
+    err_corrupted_header err_mixed_format
+    ref_4frames_seekable ref_4frames_no_seekable
+    ref_100frames_seekable ref_100frames_no_seekable
+    ref_single_frame ref_single_frame_seekable
+    ref_large_frames ref_no_content_size
+    ref_vary_size ref_seekable_checksum
+    ref_100frames_no_content_size
+    ref_many_small_frames ref_many_small_no_seekable)
     set_test_env(${tname})
 endforeach()

@@ -8,11 +8,12 @@ The test suite exercises libzstd-seek across four dimensions:
 |-------------------|--------------------------------|-------------------------------------------------------|
 | **Correctness**   | round-trip + byte comparison   | decompression produces bit-identical output           |
 | **Seek accuracy** | random seek/read verification  | every byte at every position matches expected content |
+| **Reference**     | library vs `zstd` CLI          | output identical to the reference zstd implementation |
 | **Memory safety** | AddressSanitizer + UBSanitizer | buffer overflows, use-after-free, undefined behaviour |
 | **Code coverage** | LLVM coverage + llvm-cov       | dead or untested code paths                           |
 
-58 tests in total: 11 round-trip, 37 API, and 10 error-path tests.
-All three build configurations run the same test suite.
+71 tests in total: 11 round-trip, 37 API, 10 error-path, and 13 reference comparison tests.
+All build configurations run the same test suite.
 
 ---
 
@@ -184,8 +185,16 @@ bash ../tests/test_coverage.sh ../build_cov
 
 ## Coverage results
 
-Current numbers measured on macOS Apple Silicon. Re-run
-`tests/test_coverage.sh` after changes to get exact figures.
+Current numbers for `zstd-seek.c` measured on macOS Apple Silicon with all
+71 tests (Debug, LLVM coverage build):
+
+| Metric        | Value        |
+|---------------|--------------|
+| **Functions** | 27/27 (100%) |
+| **Lines**     | 456/512 (89%)|
+| **Branches**  | 215/274 (78%)|
+
+Re-run `tests/test_coverage.sh` after changes to get exact figures.
 
 ### What is not covered (and why)
 

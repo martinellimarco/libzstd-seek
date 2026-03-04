@@ -4,8 +4,8 @@
 
 The `fuzz/` directory contains [libFuzzer](https://llvm.org/docs/LibFuzzer.html)
 harnesses for fuzz-testing libzstd-seek. Fuzzing complements the deterministic
-test suite (58 tests) by exploring the vast space of possible inputs that
-manual tests cannot cover.
+test suite (71 tests — see [TESTING.md](TESTING.md)) by exploring the vast
+space of possible inputs that manual tests cannot cover.
 
 Three harnesses are provided:
 
@@ -183,7 +183,7 @@ When the fuzzer finds a crash, the recommended workflow is:
    (NULL return or correct error handling, no crash).
 4. Register the test in `tests/CMakeLists.txt` and update `TESTING.md`.
 5. Fix the bug in `zstd-seek.c`.
-6. Verify: the crash reproducer now passes, and all 58+ tests still pass.
+6. Verify: the crash reproducer now passes, and all existing tests still pass.
 
 This ensures the bug never regresses.
 
