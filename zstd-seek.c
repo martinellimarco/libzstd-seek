@@ -369,8 +369,8 @@ ZSTDSeek_Context* ZSTDSeek_createFromFileWithoutJumpTable(const char* file){
     }
 
     struct stat st;
-    if(fstat(fd, &st) != 0 || st.st_size < 0){
-        DEBUG("Unable to stat '%s'\n", file);
+    if(fstat(fd, &st) != 0 || st.st_size <= 0){
+        DEBUG("Unable to stat or empty file '%s'\n", file);
         close(fd);
         return NULL;
     }
@@ -406,8 +406,8 @@ ZSTDSeek_Context* ZSTDSeek_createFromFile(const char* file){
 
 ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptorWithoutJumpTable(const int fd){
     struct stat st;
-    if(fstat(fd, &st) != 0 || st.st_size < 0){
-        DEBUG("Unable to stat file descriptor %d\n", fd);
+    if(fstat(fd, &st) != 0 || st.st_size <= 0){
+        DEBUG("Unable to stat or empty file descriptor %d\n", fd);
         return NULL;
     }
     const size_t size = (size_t)st.st_size;
