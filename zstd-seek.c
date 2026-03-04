@@ -183,17 +183,16 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const size_t 
                 const uint32_t numFrames = load_le32(footer);
                 const uint32_t sizePerEntry = 8 + (checksumFlag ? 4 : 0);
 
-                /* Guard against uint32_t overflow in tableSize = sizePerEntry * numFrames.
-                 * Max valid numFrames is limited by the buffer size available for entries. */
+                /* Guard: numFrames must fit within the buffer space available for entries. */
                 const size_t maxEntries = (size - ZSTD_SEEK_TABLE_FOOTER_SIZE - ZSTD_SKIPPABLE_HEADER_SIZE) / sizePerEntry;
                 if(numFrames > maxEntries){
                     DEBUG("Seektable numFrames (%u) too large for buffer. Ignoring malformed seektable.\n", numFrames);
                 }else{
-                    const uint32_t tableSize = sizePerEntry * numFrames;
-                    const uint32_t frameSize = tableSize + ZSTD_SEEK_TABLE_FOOTER_SIZE + ZSTD_SKIPPABLE_HEADER_SIZE;
+                    const size_t tableSize = (size_t)sizePerEntry * numFrames;
+                    const size_t frameSize = tableSize + ZSTD_SEEK_TABLE_FOOTER_SIZE + ZSTD_SKIPPABLE_HEADER_SIZE;
 
                     if(frameSize > size){
-                        DEBUG("Seektable frame size (%u) exceeds buffer size (%zu). Ignoring malformed seektable.\n", frameSize, size);
+                        DEBUG("Seektable frame size (%zu) exceeds buffer size (%zu). Ignoring malformed seektable.\n", frameSize, size);
                     }else{
                         uint8_t *frame = (uint8_t *)buff + (size - frameSize);
                         const uint32_t skippableHeader = load_le32(frame);
@@ -202,7 +201,7 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const size_t 
                         }else{
                             const uint32_t _frameSize = load_le32(frame + 4);
                             if(_frameSize + ZSTD_SKIPPABLE_HEADER_SIZE != frameSize){
-                                DEBUG("Last frame size = %u does not match expected size = %u. Ignoring malformed seektable.\n", _frameSize + ZSTD_SKIPPABLE_HEADER_SIZE, frameSize);
+                                DEBUG("Last frame size = %u does not match expected size = %zu. Ignoring malformed seektable.\n", _frameSize + ZSTD_SKIPPABLE_HEADER_SIZE, frameSize);
                             }else{
                                 uint8_t *table = frame + ZSTD_SKIPPABLE_HEADER_SIZE;
                                 size_t cOffset = 0;
