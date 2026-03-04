@@ -368,7 +368,12 @@ ZSTDSeek_Context* ZSTDSeek_createFromFile(const char* file){
 }
 
 ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptorWithoutJumpTable(const int fd){
-    const size_t size = lseek(fd,0L,SEEK_END);
+    struct stat st;
+    if(fstat(fd, &st) != 0 || st.st_size < 0){
+        DEBUG("Unable to stat file descriptor %d\n", fd);
+        return NULL;
+    }
+    const size_t size = (size_t)st.st_size;
 
     void* const buff = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
     if(buff == MAP_FAILED){
