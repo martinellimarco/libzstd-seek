@@ -572,8 +572,8 @@ int ZSTDSeek_seek(ZSTDSeek_Context *sctx, long offset, int origin){
             DEBUG("Negative seek\n");
             return ZSTDSEEK_ERR_NEGATIVE_SEEK;
         }else if(offset > 0){
-            ZSTDSeek_getJumpCoordinate(sctx, sctx->currentUncompressedPos+offset); //trigger an update of the lastKnownUncompressedFileSize
-            if(offset > ZSTDSeek_lastKnownUncompressedFileSize(sctx)){
+            ZSTDSeek_getJumpCoordinate(sctx, (size_t)offset); //trigger an update of the lastKnownUncompressedFileSize
+            if((size_t)offset > ZSTDSeek_lastKnownUncompressedFileSize(sctx)){
                 DEBUG("Seek to a frame beyond the buffer length\n");
                 return ZSTDSEEK_ERR_BEYOND_END_SEEK;
             }
