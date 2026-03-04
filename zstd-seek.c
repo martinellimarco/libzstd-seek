@@ -94,17 +94,19 @@ void ZSTDSeek_freeJumpTable(ZSTDSeek_JumpTable* jt){
     free(jt);
 }
 
-void ZSTDSeek_addJumpTableRecord(ZSTDSeek_JumpTable* jt, const size_t compressedPos, const size_t uncompressedPos){
+/* Internal version that reports allocation failure via return code.
+ * Returns 0 on success, -1 on failure. */
+static int addJumpTableRecord_(ZSTDSeek_JumpTable* jt, const size_t compressedPos, const size_t uncompressedPos){
     if(!jt){
         DEBUG("Invalid argument");
-        return;
+        return -1;
     }
 
     if(jt->length == jt->capacity){
         const uint64_t maxCapacity = SIZE_MAX / sizeof(ZSTDSeek_JumpTableRecord);
         if(jt->capacity >= maxCapacity){
             DEBUG("Jump Table: Maximum capacity reached\n");
-            return;
+            return -1;
         }
         uint64_t newCapacity = jt->capacity * 2;
         if(newCapacity > maxCapacity || newCapacity < jt->capacity){ /* overflow or exceed */
@@ -113,7 +115,7 @@ void ZSTDSeek_addJumpTableRecord(ZSTDSeek_JumpTable* jt, const size_t compressed
         ZSTDSeek_JumpTableRecord* newRecords = realloc(jt->records, (size_t)(newCapacity * sizeof(ZSTDSeek_JumpTableRecord)));
         if(!newRecords){
             DEBUG("Jump Table: Unable to allocate memory\n");
-            return;
+            return -1;
         }
         jt->records = newRecords;
         jt->capacity = newCapacity;
@@ -123,6 +125,12 @@ void ZSTDSeek_addJumpTableRecord(ZSTDSeek_JumpTable* jt, const size_t compressed
             compressedPos,
             uncompressedPos
     };
+    return 0;
+}
+
+/* Public wrapper — keeps the void API for callers who don't check. */
+void ZSTDSeek_addJumpTableRecord(ZSTDSeek_JumpTable* jt, const size_t compressedPos, const size_t uncompressedPos){
+    addJumpTableRecord_(jt, compressedPos, uncompressedPos);
 }
 
 int ZSTDSeek_initializeJumpTable(ZSTDSeek_Context *sctx){
@@ -207,7 +215,10 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const size_t 
                                 size_t dOffset = 0;
                                 int seektable_ok = 1;
                                 for(uint32_t i = 0; i < numFrames; i++){
-                                    ZSTDSeek_addJumpTableRecord(sctx->jt, cOffset, dOffset);
+                                    if(addJumpTableRecord_(sctx->jt, cOffset, dOffset) != 0){
+                                        seektable_ok = 0;
+                                        break;
+                                    }
                                     const uint32_t dc = load_le32(table + (i * sizePerEntry));
                                     const uint32_t dd = load_le32(table + (i * sizePerEntry) + 4);
                                     if(cOffset > SIZE_MAX - dc || dOffset > SIZE_MAX - dd){
@@ -224,7 +235,11 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const size_t 
                                     }
                                 }
                                 if(seektable_ok){
-                                    ZSTDSeek_addJumpTableRecord(sctx->jt, cOffset, dOffset);
+                                    if(addJumpTableRecord_(sctx->jt, cOffset, dOffset) != 0){
+                                        seektable_ok = 0;
+                                    }
+                                }
+                                if(seektable_ok){
                                     sctx->jumpTableFullyInitialized = 1;
                                     return 0;
                                 }
@@ -272,7 +287,9 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const size_t 
         }
 
         if(sctx->jt->length == 0 || sctx->jt->records[sctx->jt->length-1].uncompressedPos < uncompressedPos){
-            ZSTDSeek_addJumpTableRecord(sctx->jt, compressedPos, uncompressedPos);
+            if(addJumpTableRecord_(sctx->jt, compressedPos, uncompressedPos) != 0){
+                goto cleanup;
+            }
         }
 
         size_t frameContentSize = ZSTD_getFrameContentSize(buff, size);
@@ -322,7 +339,9 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const size_t 
     }
     if(sctx->jt->length > 0){
         if(sctx->jt->records[sctx->jt->length-1].uncompressedPos < uncompressedPos){
-            ZSTDSeek_addJumpTableRecord(sctx->jt, compressedPos, uncompressedPos);
+            if(addJumpTableRecord_(sctx->jt, compressedPos, uncompressedPos) != 0){
+                goto cleanup;
+            }
         }
         if(!reachedTarget){
             sctx->jumpTableFullyInitialized = 1;
