@@ -641,19 +641,20 @@ int ZSTDSeek_seek(ZSTDSeek_Context *sctx, long offset, int origin){
         }else{ //move forward
             size_t toSkipTotal = offset - sctx->currentUncompressedPos;
 
-            const size_t buffOutSize = ZSTD_DStreamOutSize();
-            void* buffOut = malloc(buffOutSize);
+            /* Stack-allocated discard buffer. ZSTDSeek_read decompresses
+             * internally into sctx->tmpOutBuff (128 KB) and copies to this
+             * buffer, so a small size only adds loop iterations for the
+             * copy step — decompression throughput is unaffected. */
+            uint8_t discardBuf[4096];
 
             while(toSkipTotal>0){
-                const size_t toSkip = buffOutSize < toSkipTotal ? buffOutSize : toSkipTotal;
-                const size_t bytesRead = ZSTDSeek_read(buffOut, toSkip, sctx);
+                const size_t toSkip = sizeof(discardBuf) < toSkipTotal ? sizeof(discardBuf) : toSkipTotal;
+                const size_t bytesRead = ZSTDSeek_read(discardBuf, toSkip, sctx);
                 if (bytesRead == 0 || bytesRead > toSkip){
                     break; /* no progress or error */
                 }
                 toSkipTotal -= bytesRead;
             }
-
-            free(buffOut);
         }
     }else{
         DEBUG("Invalid origin\n");
