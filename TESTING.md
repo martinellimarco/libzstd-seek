@@ -198,3 +198,9 @@ Current numbers measured on macOS Apple Silicon. Re-run
 - **`ZSTDSeek_fileno` with NULL** — the function does not guard against NULL (would crash); use `error_null` pattern instead.
 
 These are defensive guards or platform-specific paths, not untested logic.
+
+---
+
+## Fuzzing
+
+See [FUZZING.md](FUZZING.md) for the libFuzzer harness documentation.

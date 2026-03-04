@@ -42,13 +42,20 @@ endfunction()
 # ── Fuzz targets ─────────────────────────────────────────────────────────────
 add_fuzz_target(fuzz_decompress)
 add_fuzz_target(fuzz_seekable)
+add_fuzz_target(fuzz_jumptable)
 
 # ── Seed corpus generation ───────────────────────────────────────────────────
-set(CORPUS_DECOMPRESS ${CMAKE_CURRENT_BINARY_DIR}/corpus_decompress)
-set(CORPUS_SEEKABLE   ${CMAKE_CURRENT_BINARY_DIR}/corpus_seekable)
+set(CORPUS_DECOMPRESS  ${CMAKE_CURRENT_BINARY_DIR}/corpus_decompress)
+set(CORPUS_SEEKABLE    ${CMAKE_CURRENT_BINARY_DIR}/corpus_seekable)
+set(CORPUS_JUMPTABLE   ${CMAKE_CURRENT_BINARY_DIR}/corpus_jumptable)
 
 add_custom_target(fuzz_corpus
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/gen_corpus.sh
-            ${CORPUS_DECOMPRESS} ${CORPUS_SEEKABLE}
+            ${CORPUS_DECOMPRESS} ${CORPUS_SEEKABLE} ${CORPUS_JUMPTABLE}
     COMMENT "Generating fuzz seed corpus in ${CMAKE_CURRENT_BINARY_DIR}"
 )
+
+# ── Dictionary ───────────────────────────────────────────────────────────────
+# Copy the dictionary so it's available next to built fuzzers
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/zstd_seek.dict
+               ${CMAKE_CURRENT_BINARY_DIR}/zstd_seek.dict COPYONLY)

@@ -18,7 +18,8 @@
  *   cmake --build build_fuzz
  *
  * Run:
- *   ./build_fuzz/fuzz/fuzz_decompress corpus/ -max_len=65536 -timeout=10
+ *   ./build_fuzz/fuzz/fuzz_decompress corpus/ -dict=../fuzz/zstd_seek.dict \
+ *       -max_len=65536 -timeout=10
  */
 
 #include "zstd-seek.h"
@@ -41,27 +42,64 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     if (file_size > 0 && size >= 8) {
         char buf[4096];
 
-        /* Use bytes from the fuzz input to drive seek positions.
-         * This ensures the fuzzer can discover interesting seek patterns. */
-        size_t max_ops = size / 4;
+        /* Use bytes from the fuzz input to drive seek positions and modes.
+         * This ensures the fuzzer can discover interesting seek patterns.
+         * Each operation consumes 5 bytes: 4 for position, 1 for mode+readsize */
+        size_t max_ops = size / 5;
         if (max_ops > 64) max_ops = 64;
 
         for (size_t i = 0; i < max_ops; i++) {
+            size_t off = (i * 5) % size;
             uint32_t raw_pos;
-            memcpy(&raw_pos, data + (i * 4) % size, 4);
-            long pos = (long)(raw_pos % (file_size + 1));
+            memcpy(&raw_pos, data + off, 4);
 
-            int rc = ZSTDSeek_seek(ctx, pos, SEEK_SET);
+            /* Byte 5 selects: bits 0-1 = seek mode, bits 2-4 = read size */
+            uint8_t control = (off + 4 < size) ? data[off + 4] : 0;
+            unsigned mode = control & 0x03;
+            unsigned read_shift = (control >> 2) & 0x07;
+            size_t read_size = (size_t)1 << read_shift; /* 1, 2, 4, ..., 128 */
+            if (read_size > sizeof(buf)) read_size = sizeof(buf);
+
+            int rc;
+            switch (mode) {
+            case 0: { /* SEEK_SET */
+                long pos = (long)(raw_pos % (file_size + 1));
+                rc = ZSTDSeek_seek(ctx, pos, SEEK_SET);
+                break;
+            }
+            case 1: { /* SEEK_CUR */
+                long cur = ZSTDSeek_tell(ctx);
+                long target = (long)(raw_pos % (file_size + 1));
+                rc = ZSTDSeek_seek(ctx, target - cur, SEEK_CUR);
+                break;
+            }
+            case 2: { /* SEEK_END */
+                long neg_off = -((long)(raw_pos % (file_size + 1)));
+                rc = ZSTDSeek_seek(ctx, neg_off, SEEK_END);
+                break;
+            }
+            default: /* also SEEK_SET for mode==3 */
+                rc = ZSTDSeek_seek(ctx, (long)(raw_pos % (file_size + 1)), SEEK_SET);
+                break;
+            }
+
             if (rc == 0) {
-                ZSTDSeek_read(buf, sizeof(buf), ctx);
+                ZSTDSeek_read(buf, read_size, ctx);
             }
         }
 
-        /* Also exercise SEEK_CUR and SEEK_END */
-        ZSTDSeek_seek(ctx, 0, SEEK_SET);
-        ZSTDSeek_seek(ctx, 1, SEEK_CUR);
-        ZSTDSeek_seek(ctx, 0, SEEK_END);
-        ZSTDSeek_seek(ctx, -1, SEEK_END);
+        /* Exercise edge-case seeks */
+        ZSTDSeek_seek(ctx, 0, SEEK_SET);  /* beginning */
+        ZSTDSeek_read(buf, 1, ctx);       /* single byte at start */
+        ZSTDSeek_seek(ctx, 0, SEEK_CUR);  /* no-op (early return path) */
+        ZSTDSeek_seek(ctx, 0, SEEK_END);  /* EOF */
+        ZSTDSeek_seek(ctx, -1, SEEK_END); /* last byte */
+        ZSTDSeek_read(buf, 1, ctx);       /* single byte at end */
+
+        /* Exercise error paths (should not crash) */
+        ZSTDSeek_seek(ctx, -1, SEEK_SET);              /* negative seek */
+        ZSTDSeek_seek(ctx, (long)(file_size + 1), SEEK_SET); /* beyond end */
+        ZSTDSeek_seek(ctx, 0, 99);                     /* invalid origin */
 
         /* Exercise info functions */
         ZSTDSeek_tell(ctx);
@@ -73,7 +111,12 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 
         /* Exercise jump table access */
         ZSTDSeek_JumpTable *jt = ZSTDSeek_getJumpTableOfContext(ctx);
-        (void)jt; /* just verify no crash */
+        if (jt) {
+            for (uint64_t i = 0; i < jt->length && i < 1000; i++) {
+                (void)jt->records[i].compressedPos;
+                (void)jt->records[i].uncompressedPos;
+            }
+        }
     }
 
     ZSTDSeek_free(ctx);
