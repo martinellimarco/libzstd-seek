@@ -720,13 +720,14 @@ size_t ZSTDSeek_countFramesUpTo(ZSTDSeek_Context *sctx, const size_t upTo){
     size_t frameCompressedSize;
 
     void *buff = sctx->buff;
-    const size_t size = sctx->size;
+    size_t remaining = sctx->size;
 
     size_t counter = 0;
 
-    while ((frameCompressedSize = ZSTD_findFrameCompressedSize(buff, size))>0 && !ZSTD_isError(frameCompressedSize)) {
+    while (remaining > 0 && (frameCompressedSize = ZSTD_findFrameCompressedSize(buff, remaining))>0 && !ZSTD_isError(frameCompressedSize)) {
         counter++;
         buff = (uint8_t *)buff + frameCompressedSize;
+        remaining -= frameCompressedSize;
         if(counter >= upTo){
             return upTo;
         }
