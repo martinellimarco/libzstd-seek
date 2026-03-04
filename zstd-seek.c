@@ -44,7 +44,7 @@ struct ZSTDSeek_Context_s{
     size_t currentCompressedPos; //the position in the compressed file, returned by compressedTell
 
     ZSTDSeek_JumpTable* jt;
-    int jumpTableFullyInitialized;
+    int32_t jumpTableFullyInitialized;
 
     ZSTDSeek_JumpCoordinate jc;
 
@@ -52,8 +52,8 @@ struct ZSTDSeek_Context_s{
     uint8_t* tmpOutBuff;
     size_t tmpOutBuffPos; //the position where we read so far in the tmpOutBuff. if tmpOutBuffPos < output.pos we have data left in this buffer to read before we move on to uncompress more data
 
-    int mmap_fd; //the file descriptor of the memory map, used only if the context is created with ZSTDSeek_createFromFile or ZSTDSeek_createFromFileWithoutJumpTable
-    int close_fd; //1 if we own the mmap_fd and we are responsible of closing it, 0 otherwise
+    int32_t mmap_fd; //the file descriptor of the memory map, used only if the context is created with ZSTDSeek_createFromFile or ZSTDSeek_createFromFileWithoutJumpTable
+    int32_t close_fd; //1 if we own the mmap_fd and we are responsible of closing it, 0 otherwise
 
     uint8_t* inBuff; //it's a pointer to something inside buff
     ZSTD_inBuffer input;
@@ -96,7 +96,7 @@ void ZSTDSeek_freeJumpTable(ZSTDSeek_JumpTable* jt){
 
 /* Internal version that reports allocation failure via return code.
  * Returns 0 on success, -1 on failure. */
-static int addJumpTableRecord_(ZSTDSeek_JumpTable* jt, const size_t compressedPos, const size_t uncompressedPos){
+static int32_t addJumpTableRecord_(ZSTDSeek_JumpTable* jt, const size_t compressedPos, const size_t uncompressedPos){
     if(!jt){
         DEBUG("Invalid argument");
         return -1;
@@ -133,7 +133,7 @@ void ZSTDSeek_addJumpTableRecord(ZSTDSeek_JumpTable* jt, const size_t compressed
     addJumpTableRecord_(jt, compressedPos, uncompressedPos);
 }
 
-int ZSTDSeek_initializeJumpTable(ZSTDSeek_Context *sctx){
+int32_t ZSTDSeek_initializeJumpTable(ZSTDSeek_Context *sctx){
     if(sctx && sctx->jumpTableFullyInitialized && sctx->jt->length > 0){
         return 0;
     }
@@ -165,7 +165,7 @@ static uint32_t load_le32(const void *ptr){
     return ZSTDSeek_fromLE32(val);
 }
 
-int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const size_t upUntilPos){
+int32_t ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const size_t upUntilPos){
     if(!sctx){
         DEBUG("ZSTDSeek_Context is NULL\n");
         return -1;
@@ -213,7 +213,7 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const size_t 
                                 uint8_t *table = frame + ZSTD_SKIPPABLE_HEADER_SIZE;
                                 size_t cOffset = 0;
                                 size_t dOffset = 0;
-                                int seektable_ok = 1;
+                                int32_t seektable_ok = 1;
                                 for(uint32_t i = 0; i < numFrames; i++){
                                     if(addJumpTableRecord_(sctx->jt, cOffset, dOffset) != 0){
                                         seektable_ok = 0;
@@ -274,8 +274,8 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const size_t 
     ZSTD_DCtx *probeDctx = NULL;
     void *probeBuff = NULL;
     size_t probeBuffSize = 0;
-    int result = -1;
-    int reachedTarget = 0;
+    int32_t result = -1;
+    int32_t reachedTarget = 0;
 
     while (size > 0 && (frameCompressedSize = ZSTD_findFrameCompressedSize(buff, size))>0 && !ZSTD_isError(frameCompressedSize)) {
         const uint32_t magic = load_le32(buff);
@@ -357,7 +357,7 @@ cleanup:
     return result;
 }
 
-int ZSTDSeek_jumpTableIsInitialized(const ZSTDSeek_Context *sctx){
+bool ZSTDSeek_jumpTableIsInitialized(const ZSTDSeek_Context *sctx){
     return sctx->jumpTableFullyInitialized;
 }
 
@@ -399,7 +399,7 @@ ZSTDSeek_JumpCoordinate ZSTDSeek_getJumpCoordinate(ZSTDSeek_Context *sctx, const
 /* Seek API */
 
 ZSTDSeek_Context* ZSTDSeek_createFromFileWithoutJumpTable(const char* file){
-    const int fd = open(file, O_RDONLY, 0);
+    const int32_t fd = open(file, O_RDONLY, 0);
     if(fd < 0){
         DEBUG("Unable to open '%s'\n", file);
         return NULL;
@@ -441,7 +441,7 @@ ZSTDSeek_Context* ZSTDSeek_createFromFile(const char* file){
     return sctx;
 }
 
-ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptorWithoutJumpTable(const int fd){
+ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptorWithoutJumpTable(const int32_t fd){
     struct stat st;
     if(fstat(fd, &st) != 0 || st.st_size <= 0){
         DEBUG("Unable to stat or empty file descriptor %d\n", fd);
@@ -466,7 +466,7 @@ ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptorWithoutJumpTable(const int fd
     }
 }
 
-ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptor(const int fd){
+ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptor(const int32_t fd){
     ZSTDSeek_Context* sctx = ZSTDSeek_createFromFileDescriptorWithoutJumpTable(fd);
     if(sctx && ZSTDSeek_initializeJumpTable(sctx)!=0){
         DEBUG("Can't initialize the jump table\n");
@@ -654,7 +654,7 @@ int64_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context 
     return shouldRead - toRead;
 }
 
-int ZSTDSeek_seek(ZSTDSeek_Context *sctx, long offset, int origin){
+int32_t ZSTDSeek_seek(ZSTDSeek_Context *sctx, int64_t offset, int32_t origin){
     if(!sctx){
         DEBUG("ZSTDSeek_Context is NULL\n");
         return -1;
@@ -663,10 +663,10 @@ int ZSTDSeek_seek(ZSTDSeek_Context *sctx, long offset, int origin){
         if(offset==0){
             return 0;
         }
-        offset = (long)sctx->currentUncompressedPos + offset;
+        offset = (int64_t)sctx->currentUncompressedPos + offset;
         origin = SEEK_SET;
     }else if(origin == SEEK_END){
-        offset = (long)ZSTDSeek_uncompressedFileSize(sctx) + offset;
+        offset = (int64_t)ZSTDSeek_uncompressedFileSize(sctx) + offset;
         origin = SEEK_SET;
     }
     if(origin == SEEK_SET){
@@ -731,22 +731,22 @@ int ZSTDSeek_seek(ZSTDSeek_Context *sctx, long offset, int origin){
     return 0;
 }
 
-long ZSTDSeek_tell(ZSTDSeek_Context *sctx){
+int64_t ZSTDSeek_tell(ZSTDSeek_Context *sctx){
     if(!sctx){
         DEBUG("ZSTDSeek_Context is NULL\n");
         return -1;
     }
 
-    return (long)sctx->currentUncompressedPos;
+    return (int64_t)sctx->currentUncompressedPos;
 }
 
-long ZSTDSeek_compressedTell(ZSTDSeek_Context *sctx){
+int64_t ZSTDSeek_compressedTell(ZSTDSeek_Context *sctx){
     if(!sctx){
         DEBUG("ZSTDSeek_Context is NULL\n");
         return -1;
     }
 
-    return (long)sctx->currentCompressedPos;
+    return (int64_t)sctx->currentCompressedPos;
 }
 
 size_t ZSTDSeek_uncompressedFileSize(ZSTDSeek_Context *sctx){
@@ -769,7 +769,7 @@ size_t ZSTDSeek_lastKnownUncompressedFileSize(ZSTDSeek_Context *sctx){
     return sctx->jt->length > 0 ? sctx->jt->records[sctx->jt->length-1].uncompressedPos : 0;
 }
 
-int ZSTDSeek_fileno(const ZSTDSeek_Context *sctx){
+int32_t ZSTDSeek_fileno(const ZSTDSeek_Context *sctx){
     return sctx->mmap_fd;
 }
 
@@ -802,7 +802,7 @@ size_t ZSTDSeek_getNumberOfFrames(ZSTDSeek_Context *sctx){
     return ZSTDSeek_countFramesUpTo(sctx, SIZE_MAX);
 }
 
-int ZSTDSeek_isMultiframe(ZSTDSeek_Context *sctx){
+bool ZSTDSeek_isMultiframe(ZSTDSeek_Context *sctx){
     return ZSTDSeek_countFramesUpTo(sctx, 2) > 1;
 }
 

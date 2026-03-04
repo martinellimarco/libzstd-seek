@@ -211,11 +211,11 @@ static int test_seek_set_sequential(int argc, char *argv[]) {
     if (!ctx) { FAIL("createFromFile failed"); free(raw); return 1; }
 
     for (size_t pos = 0; pos < raw_size; pos++) {
-        int rc = ZSTDSeek_seek(ctx, (long)pos, SEEK_SET);
+        int32_t rc = ZSTDSeek_seek(ctx, (int64_t)pos, SEEK_SET);
         if (rc != 0) { FAIL("seek(%zu) failed with %d", pos, rc); ZSTDSeek_free(ctx); free(raw); return 1; }
 
-        long tell = ZSTDSeek_tell(ctx);
-        if (tell != (long)pos) { FAIL("tell=%ld expected=%zu", tell, pos); ZSTDSeek_free(ctx); free(raw); return 1; }
+        int64_t tell = ZSTDSeek_tell(ctx);
+        if (tell != (int64_t)pos) { FAIL("tell=%" PRId64 " expected=%zu", tell, pos); ZSTDSeek_free(ctx); free(raw); return 1; }
 
         uint8_t byte;
         int64_t n = ZSTDSeek_read(&byte, 1, ctx);
@@ -247,7 +247,7 @@ static int test_seek_set_backward(int argc, char *argv[]) {
 
     for (size_t i = raw_size; i > 0; i--) {
         size_t pos = i - 1;
-        int rc = ZSTDSeek_seek(ctx, (long)pos, SEEK_SET);
+        int32_t rc = ZSTDSeek_seek(ctx, (int64_t)pos, SEEK_SET);
         if (rc != 0) { FAIL("seek(%zu) failed", pos); ZSTDSeek_free(ctx); free(raw); return 1; }
         uint8_t byte;
         ZSTDSeek_read(&byte, 1, ctx);
@@ -277,7 +277,7 @@ static int test_seek_cur_forward(int argc, char *argv[]) {
 
     /* Read first byte, then SEEK_CUR +1 repeatedly (skip every other byte) */
     for (size_t pos = 0; pos < raw_size; pos += 2) {
-        int rc = ZSTDSeek_seek(ctx, (long)pos, SEEK_SET);
+        int32_t rc = ZSTDSeek_seek(ctx, (int64_t)pos, SEEK_SET);
         if (rc != 0) { FAIL("seek(%zu) failed", pos); ZSTDSeek_free(ctx); free(raw); return 1; }
         uint8_t byte;
         ZSTDSeek_read(&byte, 1, ctx);
@@ -309,12 +309,12 @@ static int test_seek_end(int argc, char *argv[]) {
 
     size_t file_size = ZSTDSeek_uncompressedFileSize(ctx);
 
-    int rc = ZSTDSeek_seek(ctx, 0, SEEK_END);
+    int32_t rc = ZSTDSeek_seek(ctx, 0, SEEK_END);
     if (rc != 0) { FAIL("seek_end(0) failed with %d", rc); ZSTDSeek_free(ctx); return 1; }
 
-    long tell = ZSTDSeek_tell(ctx);
+    int64_t tell = ZSTDSeek_tell(ctx);
     if ((size_t)tell != file_size) {
-        FAIL("tell=%ld expected=%zu after SEEK_END(0)", tell, file_size);
+        FAIL("tell=%" PRId64 " expected=%zu after SEEK_END(0)", tell, file_size);
         ZSTDSeek_free(ctx); return 1;
     }
 
@@ -323,7 +323,7 @@ static int test_seek_end(int argc, char *argv[]) {
     if (rc != 0) { FAIL("seek_end(-1) failed"); ZSTDSeek_free(ctx); return 1; }
     tell = ZSTDSeek_tell(ctx);
     if ((size_t)tell != file_size - 1) {
-        FAIL("tell=%ld expected=%zu after SEEK_END(-1)", tell, file_size - 1);
+        FAIL("tell=%" PRId64 " expected=%zu after SEEK_END(-1)", tell, file_size - 1);
         ZSTDSeek_free(ctx); return 1;
     }
 
@@ -355,19 +355,19 @@ static int test_seek_random(int argc, char *argv[]) {
     for (size_t i = 0; i < num_ops; i++) {
         size_t pos = (size_t)(xorshift64(&state) % raw_size);
         unsigned method = (unsigned)(xorshift64(&state) % 3);
-        int rc;
+        int32_t rc;
 
         switch (method) {
         case 0: /* SEEK_SET */
-            rc = ZSTDSeek_seek(ctx, (long)pos, SEEK_SET);
+            rc = ZSTDSeek_seek(ctx, (int64_t)pos, SEEK_SET);
             break;
         case 1: { /* SEEK_CUR — relative from current position */
-            long cur = ZSTDSeek_tell(ctx);
-            rc = ZSTDSeek_seek(ctx, (long)pos - cur, SEEK_CUR);
+            int64_t cur = ZSTDSeek_tell(ctx);
+            rc = ZSTDSeek_seek(ctx, (int64_t)pos - cur, SEEK_CUR);
             break;
         }
         case 2: { /* SEEK_END — negative offset from end */
-            rc = ZSTDSeek_seek(ctx, (long)pos - (long)raw_size, SEEK_END);
+            rc = ZSTDSeek_seek(ctx, (int64_t)pos - (int64_t)raw_size, SEEK_END);
             break;
         }
         default: rc = -1; break;
@@ -811,22 +811,22 @@ static int test_compressed_tell(int argc, char *argv[]) {
     ZSTDSeek_Context *ctx = ZSTDSeek_createFromFile(argv[0]);
     if (!ctx) { FAIL("createFromFile failed"); return 1; }
 
-    long ct0 = ZSTDSeek_compressedTell(ctx);
-    if (ct0 < 0) { FAIL("initial compressedTell=%ld", ct0); ZSTDSeek_free(ctx); return 1; }
+    int64_t ct0 = ZSTDSeek_compressedTell(ctx);
+    if (ct0 < 0) { FAIL("initial compressedTell=%" PRId64, ct0); ZSTDSeek_free(ctx); return 1; }
 
     /* Read some data */
     char buf[256];
     ZSTDSeek_read(buf, sizeof(buf), ctx);
 
-    long ct1 = ZSTDSeek_compressedTell(ctx);
-    INFO("compressedTell: before=%ld after_read=%ld", ct0, ct1);
+    int64_t ct1 = ZSTDSeek_compressedTell(ctx);
+    INFO("compressedTell: before=%" PRId64 " after_read=%" PRId64, ct0, ct1);
 
     /* Seek to end */
     ZSTDSeek_seek(ctx, 0, SEEK_END);
-    long ct_end = ZSTDSeek_compressedTell(ctx);
-    INFO("compressedTell at SEEK_END: %ld", ct_end);
+    int64_t ct_end = ZSTDSeek_compressedTell(ctx);
+    INFO("compressedTell at SEEK_END: %" PRId64, ct_end);
 
-    PASS("compressed_tell: initial=%ld end=%ld", ct0, ct_end);
+    PASS("compressed_tell: initial=%" PRId64 " end=%" PRId64, ct0, ct_end);
     ZSTDSeek_free(ctx);
     return 0;
 }
@@ -843,7 +843,7 @@ static int test_compressed_tell_monotonic(int argc, char *argv[]) {
     ZSTDSeek_Context *ctx = ZSTDSeek_createFromFile(argv[0]);
     if (!ctx) { FAIL("createFromFile failed"); return 1; }
 
-    long prev_ct = 0;
+    int64_t prev_ct = 0;
     size_t total_read = 0;
     size_t reads = 0;
     uint8_t buf[10];
@@ -852,9 +852,9 @@ static int test_compressed_tell_monotonic(int argc, char *argv[]) {
     while ((n = ZSTDSeek_read(buf, sizeof(buf), ctx)) > 0) {
         total_read += (size_t)n;
         reads++;
-        long ct = ZSTDSeek_compressedTell(ctx);
+        int64_t ct = ZSTDSeek_compressedTell(ctx);
         if (ct < prev_ct) {
-            FAIL("compressedTell went backwards: %ld -> %ld after read #%zu (total_read=%zu)",
+            FAIL("compressedTell went backwards: %" PRId64 " -> %" PRId64 " after read #%zu (total_read=%zu)",
                  prev_ct, ct, reads, total_read);
             ZSTDSeek_free(ctx);
             return 1;
@@ -863,12 +863,12 @@ static int test_compressed_tell_monotonic(int argc, char *argv[]) {
     }
 
     if (prev_ct <= 0) {
-        FAIL("compressedTell never advanced (final=%ld, total_read=%zu)", prev_ct, total_read);
+        FAIL("compressedTell never advanced (final=%" PRId64 ", total_read=%zu)", prev_ct, total_read);
         ZSTDSeek_free(ctx);
         return 1;
     }
 
-    PASS("compressed_tell_monotonic: %zu reads, %zu bytes, final compressedTell=%ld",
+    PASS("compressed_tell_monotonic: %zu reads, %zu bytes, final compressedTell=%" PRId64,
          reads, total_read, prev_ct);
     ZSTDSeek_free(ctx);
     return 0;
@@ -897,16 +897,16 @@ static int test_compressed_tell_seek(int argc, char *argv[]) {
         size_t uncomp_pos = jt->records[i].uncompressedPos;
         size_t comp_pos   = jt->records[i].compressedPos;
 
-        int rc = ZSTDSeek_seek(ctx, (long)uncomp_pos, SEEK_SET);
+        int32_t rc = ZSTDSeek_seek(ctx, (int64_t)uncomp_pos, SEEK_SET);
         if (rc != 0) {
             FAIL("seek to frame %llu (uncomp=%zu) failed: %d", (unsigned long long)i, uncomp_pos, rc);
             ZSTDSeek_free(ctx);
             return 1;
         }
 
-        long ct = ZSTDSeek_compressedTell(ctx);
+        int64_t ct = ZSTDSeek_compressedTell(ctx);
         if ((size_t)ct != comp_pos) {
-            FAIL("frame %llu: after seek, compressedTell=%ld expected=%zu",
+            FAIL("frame %llu: after seek, compressedTell=%" PRId64 " expected=%zu",
                  (unsigned long long)i, ct, comp_pos);
             ZSTDSeek_free(ctx);
             return 1;
@@ -920,9 +920,9 @@ static int test_compressed_tell_seek(int argc, char *argv[]) {
             ZSTDSeek_free(ctx);
             return 1;
         }
-        long ct2 = ZSTDSeek_compressedTell(ctx);
+        int64_t ct2 = ZSTDSeek_compressedTell(ctx);
         if (ct2 < ct) {
-            FAIL("frame %llu: compressedTell went backwards after read: %ld -> %ld",
+            FAIL("frame %llu: compressedTell went backwards after read: %" PRId64 " -> %" PRId64,
                  (unsigned long long)i, ct, ct2);
             ZSTDSeek_free(ctx);
             return 1;
@@ -930,24 +930,24 @@ static int test_compressed_tell_seek(int argc, char *argv[]) {
     }
 
     /* Part 2: Seek back to start, verify compressedTell == 0 */
-    int rc = ZSTDSeek_seek(ctx, 0, SEEK_SET);
+    int32_t rc = ZSTDSeek_seek(ctx, 0, SEEK_SET);
     if (rc != 0) { FAIL("seek(0, SEEK_SET) failed"); ZSTDSeek_free(ctx); return 1; }
 
-    long ct_start = ZSTDSeek_compressedTell(ctx);
+    int64_t ct_start = ZSTDSeek_compressedTell(ctx);
     if (ct_start != 0) {
-        FAIL("after seek(0), compressedTell=%ld expected=0", ct_start);
+        FAIL("after seek(0), compressedTell=%" PRId64 " expected=0", ct_start);
         ZSTDSeek_free(ctx);
         return 1;
     }
 
     /* Part 3: Sequential read-through, verify monotonic */
-    long prev_ct = 0;
+    int64_t prev_ct = 0;
     uint8_t buf[10];
     int64_t n;
     while ((n = ZSTDSeek_read(buf, sizeof(buf), ctx)) > 0) {
-        long ct = ZSTDSeek_compressedTell(ctx);
+        int64_t ct = ZSTDSeek_compressedTell(ctx);
         if (ct < prev_ct) {
-            FAIL("sequential pass: compressedTell went backwards: %ld -> %ld", prev_ct, ct);
+            FAIL("sequential pass: compressedTell went backwards: %" PRId64 " -> %" PRId64, prev_ct, ct);
             ZSTDSeek_free(ctx);
             return 1;
         }
@@ -992,7 +992,7 @@ static int test_seek_forward_large(int argc, char *argv[]) {
         if (frame_size < 502) continue;
 
         /* Seek to frame start, read 1 byte, verify */
-        int rc = ZSTDSeek_seek(ctx, (long)frame_start, SEEK_SET);
+        int32_t rc = ZSTDSeek_seek(ctx, (int64_t)frame_start, SEEK_SET);
         if (rc != 0) {
             FAIL("seek to frame %llu start (%zu) failed", (unsigned long long)i, frame_start);
             ZSTDSeek_free(ctx); free(raw); return 1;
@@ -1013,10 +1013,10 @@ static int test_seek_forward_large(int argc, char *argv[]) {
             ZSTDSeek_free(ctx); free(raw); return 1;
         }
 
-        long pos = ZSTDSeek_tell(ctx);
-        long expected_pos = (long)(frame_start + 501);
+        int64_t pos = ZSTDSeek_tell(ctx);
+        int64_t expected_pos = (int64_t)(frame_start + 501);
         if (pos != expected_pos) {
-            FAIL("frame %llu: after skip, tell=%ld expected=%ld",
+            FAIL("frame %llu: after skip, tell=%" PRId64 " expected=%" PRId64,
                  (unsigned long long)i, pos, expected_pos);
             ZSTDSeek_free(ctx); free(raw); return 1;
         }
@@ -1068,7 +1068,7 @@ static int test_frame_boundary(int argc, char *argv[]) {
     if (boundary < 2) { FAIL("frame boundary too small"); ZSTDSeek_free(ctx); free(raw); return 1; }
 
     size_t seek_pos = boundary - 2;
-    int rc = ZSTDSeek_seek(ctx, (long)seek_pos, SEEK_SET);
+    int32_t rc = ZSTDSeek_seek(ctx, (int64_t)seek_pos, SEEK_SET);
     if (rc != 0) { FAIL("seek to %zu failed", seek_pos); ZSTDSeek_free(ctx); free(raw); return 1; }
 
     /* Read 4 bytes that span the boundary */
@@ -1168,7 +1168,7 @@ static int test_error_seek_negative(int argc, char *argv[]) {
     ZSTDSeek_Context *ctx = ZSTDSeek_createFromFile(argv[0]);
     if (!ctx) { FAIL("createFromFile failed"); return 1; }
 
-    int rc = ZSTDSeek_seek(ctx, -1, SEEK_SET);
+    int32_t rc = ZSTDSeek_seek(ctx, -1, SEEK_SET);
     if (rc != ZSTDSEEK_ERR_NEGATIVE_SEEK) {
         FAIL("seek(-1, SEEK_SET) returned %d, expected %d", rc, ZSTDSEEK_ERR_NEGATIVE_SEEK);
         ZSTDSeek_free(ctx); return 1;
@@ -1189,7 +1189,7 @@ static int test_error_seek_beyond(int argc, char *argv[]) {
     if (!ctx) { FAIL("createFromFile failed"); return 1; }
 
     size_t file_size = ZSTDSeek_uncompressedFileSize(ctx);
-    int rc = ZSTDSeek_seek(ctx, (long)(file_size + 100), SEEK_SET);
+    int32_t rc = ZSTDSeek_seek(ctx, (int64_t)(file_size + 100), SEEK_SET);
     if (rc != ZSTDSEEK_ERR_BEYOND_END_SEEK) {
         FAIL("seek beyond EOF returned %d, expected %d", rc, ZSTDSEEK_ERR_BEYOND_END_SEEK);
         ZSTDSeek_free(ctx); return 1;
@@ -1209,7 +1209,7 @@ static int test_error_seek_invalid_origin(int argc, char *argv[]) {
     ZSTDSeek_Context *ctx = ZSTDSeek_createFromFile(argv[0]);
     if (!ctx) { FAIL("createFromFile failed"); return 1; }
 
-    int rc = ZSTDSeek_seek(ctx, 0, 99); /* invalid origin */
+    int32_t rc = ZSTDSeek_seek(ctx, 0, 99); /* invalid origin */
     if (rc != -1) {
         FAIL("seek with origin=99 returned %d, expected -1", rc);
         ZSTDSeek_free(ctx); return 1;
@@ -1232,7 +1232,7 @@ static int test_error_read_past_eof(int argc, char *argv[]) {
     size_t file_size = ZSTDSeek_uncompressedFileSize(ctx);
 
     /* Seek to near end */
-    ZSTDSeek_seek(ctx, (long)(file_size - 1), SEEK_SET);
+    ZSTDSeek_seek(ctx, (int64_t)(file_size - 1), SEEK_SET);
 
     /* Try to read more than available */
     uint8_t buf[1024];
@@ -1297,22 +1297,22 @@ static int test_seek_cur_backward(int argc, char *argv[]) {
     /* Start position: use 24 or less if the file is small */
     size_t start = (raw_size > 24) ? 24 : (raw_size & ~(size_t)1);
 
-    int rc = ZSTDSeek_seek(ctx, (long)start, SEEK_SET);
+    int32_t rc = ZSTDSeek_seek(ctx, (int64_t)start, SEEK_SET);
     if (rc != 0) { FAIL("initial seek(%zu) failed", start); ZSTDSeek_free(ctx); free(raw); return 1; }
 
     size_t checked = 0;
-    for (long pos = (long)start; pos >= 0; pos -= 2) {
-        long tell = ZSTDSeek_tell(ctx);
+    for (int64_t pos = (int64_t)start; pos >= 0; pos -= 2) {
+        int64_t tell = ZSTDSeek_tell(ctx);
         if (tell != pos) {
-            FAIL("tell=%ld expected=%ld", tell, pos);
+            FAIL("tell=%" PRId64 " expected=%" PRId64, tell, pos);
             ZSTDSeek_free(ctx); free(raw); return 1;
         }
 
         uint8_t byte;
         int64_t n = ZSTDSeek_read(&byte, 1, ctx);
-        if (n != 1) { FAIL("read at pos %ld returned %" PRId64, pos, n); ZSTDSeek_free(ctx); free(raw); return 1; }
+        if (n != 1) { FAIL("read at pos %" PRId64 " returned %" PRId64, pos, n); ZSTDSeek_free(ctx); free(raw); return 1; }
         if (byte != raw[pos]) {
-            FAIL("at pos %ld: got 0x%02x expected 0x%02x", pos, byte, raw[pos]);
+            FAIL("at pos %" PRId64 ": got 0x%02x expected 0x%02x", pos, byte, raw[pos]);
             ZSTDSeek_free(ctx); free(raw); return 1;
         }
         checked++;
@@ -1321,7 +1321,7 @@ static int test_seek_cur_backward(int argc, char *argv[]) {
         if (pos >= 2) {
             rc = ZSTDSeek_seek(ctx, -3, SEEK_CUR);
             if (rc != 0) {
-                FAIL("seek_cur(-3) from pos %ld failed with %d", pos + 1, rc);
+                FAIL("seek_cur(-3) from pos %" PRId64 " failed with %d", pos + 1, rc);
                 ZSTDSeek_free(ctx); free(raw); return 1;
             }
         }
@@ -1343,7 +1343,8 @@ static int test_seek_out_of_file(int argc, char *argv[]) {
     if (!ctx) { FAIL("createFromFile failed"); return 1; }
 
     size_t N = ZSTDSeek_uncompressedFileSize(ctx);
-    int rc, failures = 0;
+    int32_t rc;
+    int failures = 0;
 
     /* 1. seek(-1, SEEK_SET) → NEGATIVE_SEEK */
     rc = ZSTDSeek_seek(ctx, -1, SEEK_SET);
@@ -1352,13 +1353,13 @@ static int test_seek_out_of_file(int argc, char *argv[]) {
     }
 
     /* 2. seek(N, SEEK_SET) → 0 (EOF position is valid) */
-    rc = ZSTDSeek_seek(ctx, (long)N, SEEK_SET);
+    rc = ZSTDSeek_seek(ctx, (int64_t)N, SEEK_SET);
     if (rc != 0) {
         FAIL("case 2: seek(N=%zu,SET)=%d expected=0", N, rc); failures++;
     }
 
     /* 3. seek(N+1, SEEK_SET) → BEYOND_END */
-    rc = ZSTDSeek_seek(ctx, (long)(N + 1), SEEK_SET);
+    rc = ZSTDSeek_seek(ctx, (int64_t)(N + 1), SEEK_SET);
     if (rc != ZSTDSEEK_ERR_BEYOND_END_SEEK) {
         FAIL("case 3: seek(N+1=%zu,SET)=%d expected=%d", N + 1, rc, ZSTDSEEK_ERR_BEYOND_END_SEEK); failures++;
     }
@@ -1370,18 +1371,18 @@ static int test_seek_out_of_file(int argc, char *argv[]) {
     }
 
     /* 5. seek(-N, SEEK_END) → 0 (position 0) */
-    rc = ZSTDSeek_seek(ctx, -(long)N, SEEK_END);
+    rc = ZSTDSeek_seek(ctx, -(int64_t)N, SEEK_END);
     if (rc != 0) {
-        FAIL("case 5: seek(-N=%ld,END)=%d expected=0", -(long)N, rc); failures++;
+        FAIL("case 5: seek(-N=%" PRId64 ",END)=%d expected=0", -(int64_t)N, rc); failures++;
     } else {
-        long tell = ZSTDSeek_tell(ctx);
-        if (tell != 0) { FAIL("case 5: tell=%ld expected=0", tell); failures++; }
+        int64_t tell = ZSTDSeek_tell(ctx);
+        if (tell != 0) { FAIL("case 5: tell=%" PRId64 " expected=0", tell); failures++; }
     }
 
     /* 6. seek(-(N+1), SEEK_END) → NEGATIVE_SEEK */
-    rc = ZSTDSeek_seek(ctx, -(long)(N + 1), SEEK_END);
+    rc = ZSTDSeek_seek(ctx, -(int64_t)(N + 1), SEEK_END);
     if (rc != ZSTDSEEK_ERR_NEGATIVE_SEEK) {
-        FAIL("case 6: seek(-(N+1)=%ld,END)=%d expected=%d", -(long)(N + 1), rc, ZSTDSEEK_ERR_NEGATIVE_SEEK); failures++;
+        FAIL("case 6: seek(-(N+1)=%" PRId64 ",END)=%d expected=%d", -(int64_t)(N + 1), rc, ZSTDSEEK_ERR_NEGATIVE_SEEK); failures++;
     }
 
     /* 7. seek(-1, SEEK_CUR) from pos 0 → NEGATIVE_SEEK */
@@ -1393,14 +1394,14 @@ static int test_seek_out_of_file(int argc, char *argv[]) {
 
     /* 8. seek(N, SEEK_CUR) from pos 0 → 0 (EOF position) */
     ZSTDSeek_seek(ctx, 0, SEEK_SET);
-    rc = ZSTDSeek_seek(ctx, (long)N, SEEK_CUR);
+    rc = ZSTDSeek_seek(ctx, (int64_t)N, SEEK_CUR);
     if (rc != 0) {
         FAIL("case 8: seek(N=%zu,CUR)@0=%d expected=0", N, rc); failures++;
     }
 
     /* 9. seek(N+1, SEEK_CUR) from pos 0 → BEYOND_END */
     ZSTDSeek_seek(ctx, 0, SEEK_SET);
-    rc = ZSTDSeek_seek(ctx, (long)(N + 1), SEEK_CUR);
+    rc = ZSTDSeek_seek(ctx, (int64_t)(N + 1), SEEK_CUR);
     if (rc != ZSTDSEEK_ERR_BEYOND_END_SEEK) {
         FAIL("case 9: seek(N+1=%zu,CUR)@0=%d expected=%d", N + 1, rc, ZSTDSEEK_ERR_BEYOND_END_SEEK); failures++;
     }
@@ -1439,9 +1440,9 @@ static int test_read_too_much(int argc, char *argv[]) {
         free(buf); ZSTDSeek_free(ctx); free(raw); return 1;
     }
 
-    long tell = ZSTDSeek_tell(ctx);
+    int64_t tell = ZSTDSeek_tell(ctx);
     if ((size_t)tell != file_size) {
-        FAIL("tell=%ld expected=%zu after short read", tell, file_size);
+        FAIL("tell=%" PRId64 " expected=%zu after short read", tell, file_size);
         free(buf); ZSTDSeek_free(ctx); free(raw); return 1;
     }
 
@@ -1459,11 +1460,11 @@ static int test_read_too_much(int argc, char *argv[]) {
 
     tell = ZSTDSeek_tell(ctx);
     if ((size_t)tell != file_size) {
-        FAIL("tell=%ld expected=%zu after second read", tell, file_size);
+        FAIL("tell=%" PRId64 " expected=%zu after second read", tell, file_size);
         free(buf); ZSTDSeek_free(ctx); free(raw); return 1;
     }
 
-    PASS("read_too_much: requested %zu, got %" PRId64 ", tell=%ld, re-read=0", request, n, tell);
+    PASS("read_too_much: requested %zu, got %" PRId64 ", tell=%" PRId64 ", re-read=0", request, n, tell);
     free(buf); ZSTDSeek_free(ctx); free(raw);
     return 0;
 }
@@ -1609,7 +1610,7 @@ static int test_jt_progressive_reads(int argc, char *argv[]) {
     }
 
     /* Seek to end → fully initializes JT */
-    int rc = ZSTDSeek_seek(ctx, 0, SEEK_END);
+    int32_t rc = ZSTDSeek_seek(ctx, 0, SEEK_END);
     if (rc != 0) { FAIL("seek(0, SEEK_END) failed"); ZSTDSeek_free(ctx); free(raw); return 1; }
 
     uint64_t after_end = jt->length;
@@ -1724,27 +1725,27 @@ static int test_seek_cur_zero(int argc, char *argv[]) {
     int failures = 0;
 
     /* Test at position 0 */
-    int rc = ZSTDSeek_seek(ctx, 0, SEEK_CUR);
+    int32_t rc = ZSTDSeek_seek(ctx, 0, SEEK_CUR);
     if (rc != 0) { FAIL("seek(0,CUR)@0=%d expected=0", rc); failures++; }
-    if (ZSTDSeek_tell(ctx) != 0) { FAIL("tell=%ld expected=0 after seek(0,CUR)", ZSTDSeek_tell(ctx)); failures++; }
+    if (ZSTDSeek_tell(ctx) != 0) { FAIL("tell=%" PRId64 " expected=0 after seek(0,CUR)", ZSTDSeek_tell(ctx)); failures++; }
 
     /* Seek to middle, then seek(0, CUR) */
-    long mid = (long)(file_size / 2);
+    int64_t mid = (int64_t)(file_size / 2);
     ZSTDSeek_seek(ctx, mid, SEEK_SET);
     rc = ZSTDSeek_seek(ctx, 0, SEEK_CUR);
-    if (rc != 0) { FAIL("seek(0,CUR)@%ld=%d expected=0", mid, rc); failures++; }
-    if (ZSTDSeek_tell(ctx) != mid) { FAIL("tell=%ld expected=%ld after seek(0,CUR)", ZSTDSeek_tell(ctx), mid); failures++; }
+    if (rc != 0) { FAIL("seek(0,CUR)@%" PRId64 "=%d expected=0", mid, rc); failures++; }
+    if (ZSTDSeek_tell(ctx) != mid) { FAIL("tell=%" PRId64 " expected=%" PRId64 " after seek(0,CUR)", ZSTDSeek_tell(ctx), mid); failures++; }
 
     /* Seek to EOF, then seek(0, CUR) */
     ZSTDSeek_seek(ctx, 0, SEEK_END);
-    long eof_pos = ZSTDSeek_tell(ctx);
+    int64_t eof_pos = ZSTDSeek_tell(ctx);
     rc = ZSTDSeek_seek(ctx, 0, SEEK_CUR);
     if (rc != 0) { FAIL("seek(0,CUR)@EOF=%d expected=0", rc); failures++; }
-    if (ZSTDSeek_tell(ctx) != eof_pos) { FAIL("tell=%ld expected=%ld after seek(0,CUR)@EOF", ZSTDSeek_tell(ctx), eof_pos); failures++; }
+    if (ZSTDSeek_tell(ctx) != eof_pos) { FAIL("tell=%" PRId64 " expected=%" PRId64 " after seek(0,CUR)@EOF", ZSTDSeek_tell(ctx), eof_pos); failures++; }
 
     if (failures > 0) { FAIL("seek_cur_zero: %d failures", failures); ZSTDSeek_free(ctx); return 1; }
 
-    PASS("seek_cur_zero: no-op at pos=0, mid=%ld, eof=%ld", mid, eof_pos);
+    PASS("seek_cur_zero: no-op at pos=0, mid=%" PRId64 ", eof=%" PRId64, mid, eof_pos);
     ZSTDSeek_free(ctx);
     return 0;
 }
@@ -1791,7 +1792,7 @@ static int test_seek_to_same_pos(int argc, char *argv[]) {
 
     /* Seek to position 100 (or smaller if file is small) */
     size_t target = (raw_size > 100) ? 100 : raw_size / 2;
-    int rc = ZSTDSeek_seek(ctx, (long)target, SEEK_SET);
+    int32_t rc = ZSTDSeek_seek(ctx, (int64_t)target, SEEK_SET);
     if (rc != 0) { FAIL("initial seek(%zu) failed", target); ZSTDSeek_free(ctx); free(raw); return 1; }
 
     /* Read one byte to verify position */
@@ -1803,7 +1804,7 @@ static int test_seek_to_same_pos(int argc, char *argv[]) {
     }
 
     /* Now seek back to the same target position */
-    rc = ZSTDSeek_seek(ctx, (long)target, SEEK_SET);
+    rc = ZSTDSeek_seek(ctx, (int64_t)target, SEEK_SET);
     if (rc != 0) { FAIL("second seek(%zu) failed with %d", target, rc); ZSTDSeek_free(ctx); free(raw); return 1; }
 
     /* Verify we can read the same byte again */

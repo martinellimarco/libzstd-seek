@@ -20,6 +20,7 @@ extern "C" {
 
 #include <stdio.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <zstd.h>
 
 #ifndef _ZSTD_SEEK_DEBUG_
@@ -145,7 +146,7 @@ void ZSTDSeek_addJumpTableRecord(ZSTDSeek_JumpTable* jt, size_t compressedPos, s
  * @param sctx  Context whose jump table should be populated.
  * @return 0 on success, -1 on error (invalid data or @p sctx is @c NULL).
  */
-int ZSTDSeek_initializeJumpTable(ZSTDSeek_Context *sctx);
+int32_t ZSTDSeek_initializeJumpTable(ZSTDSeek_Context *sctx);
 
 /**
  * Parse the compressed data and populate the jump table up to a given
@@ -163,7 +164,7 @@ int ZSTDSeek_initializeJumpTable(ZSTDSeek_Context *sctx);
  * @param upUntilPos  Target uncompressed position (inclusive).
  * @return 0 on success, -1 on error (invalid data or @p sctx is @c NULL).
  */
-int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUntilPos);
+int32_t ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUntilPos);
 
 /**
  * Check whether the jump table has been fully initialized.
@@ -171,7 +172,7 @@ int ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t upUnti
  * @param sctx  Context to query.
  * @return 1 if fully initialized, 0 otherwise.
  */
-int ZSTDSeek_jumpTableIsInitialized(const ZSTDSeek_Context *sctx);
+bool ZSTDSeek_jumpTableIsInitialized(const ZSTDSeek_Context *sctx);
 
 /* ── Seek API — context creation ────────────────────────────────── */
 
@@ -253,7 +254,7 @@ ZSTDSeek_Context* ZSTDSeek_createWithoutJumpTable(void *buff, size_t size);
  * @return A new context on success, or @c NULL if the descriptor cannot
  *         be memory-mapped or does not start with a valid zstd frame.
  */
-ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptorWithoutJumpTable(int fd);
+ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptorWithoutJumpTable(int32_t fd);
 
 /**
  * Create a context from a file descriptor and initialize the jump table.
@@ -269,7 +270,7 @@ ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptorWithoutJumpTable(int fd);
  *         be memory-mapped, does not start with a valid zstd frame, or
  *         jump table initialization fails.
  */
-ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptor(int fd);
+ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptor(int32_t fd);
 
 /* ── Seek API — I/O ─────────────────────────────────────────────── */
 
@@ -309,7 +310,7 @@ int64_t ZSTDSeek_read(void *outBuff, size_t outBuffSize, ZSTDSeek_Context *sctx)
  *         decompression or stream error,
  *         or -1 for any other error (e.g. @c NULL context, invalid origin).
  */
-int ZSTDSeek_seek(ZSTDSeek_Context *sctx, long offset, int origin);
+int32_t ZSTDSeek_seek(ZSTDSeek_Context *sctx, int64_t offset, int32_t origin);
 
 /**
  * Return the current position in the uncompressed stream.
@@ -319,7 +320,7 @@ int ZSTDSeek_seek(ZSTDSeek_Context *sctx, long offset, int origin);
  * @param sctx  Context to query.
  * @return Current uncompressed byte offset, or -1 if @p sctx is @c NULL.
  */
-long ZSTDSeek_tell(ZSTDSeek_Context *sctx);
+int64_t ZSTDSeek_tell(ZSTDSeek_Context *sctx);
 
 /**
  * Return the current position in the compressed stream.
@@ -327,7 +328,7 @@ long ZSTDSeek_tell(ZSTDSeek_Context *sctx);
  * @param sctx  Context to query.
  * @return Current compressed byte offset, or -1 if @p sctx is @c NULL.
  */
-long ZSTDSeek_compressedTell(ZSTDSeek_Context *sctx);
+int64_t ZSTDSeek_compressedTell(ZSTDSeek_Context *sctx);
 
 /* ── Seek API — info ────────────────────────────────────────────── */
 
@@ -373,7 +374,7 @@ size_t ZSTDSeek_lastKnownUncompressedFileSize(ZSTDSeek_Context *sctx);
  * @param sctx  Context to query.
  * @return File descriptor, or -1 if unavailable.
  */
-int ZSTDSeek_fileno(const ZSTDSeek_Context *sctx);
+int32_t ZSTDSeek_fileno(const ZSTDSeek_Context *sctx);
 
 /**
  * Return the total number of zstd frames (data + skippable) in the stream.
@@ -395,7 +396,7 @@ size_t ZSTDSeek_getNumberOfFrames(ZSTDSeek_Context *sctx);
  * @param sctx  Context to query.
  * @return 1 if the stream has two or more frames, 0 otherwise.
  */
-int ZSTDSeek_isMultiframe(ZSTDSeek_Context *sctx);
+bool ZSTDSeek_isMultiframe(ZSTDSeek_Context *sctx);
 
 /* ── Seek API — cleanup ─────────────────────────────────────────── */
 
