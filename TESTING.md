@@ -10,6 +10,7 @@ The test suite exercises libzstd-seek across four dimensions:
 | **Seek accuracy** | random seek/read verification  | every byte at every position matches expected content |
 | **Reference**     | library vs `zstd` CLI          | output identical to the reference zstd implementation |
 | **Memory safety** | AddressSanitizer + UBSanitizer | buffer overflows, use-after-free, undefined behaviour |
+| **Static analysis**| 5 analysers (see below)        | null derefs, leaks, type bugs, dead code             |
 | **Code coverage** | LLVM coverage + llvm-cov       | dead or untested code paths                           |
 
 77 tests in total: 11 round-trip, 41 API, 12 error-path, and 13 reference comparison tests.
@@ -214,6 +215,81 @@ Re-run `tests/test_coverage.sh` after changes to get exact figures.
 - **`size_t` overflow guards in frame scan** (`compressedPos`, `uncompressedPos`, `frameContentSize` probing) — require accumulated positions exceeding `SIZE_MAX`, which is only possible on 32-bit with very large streams.
 
 These are defensive guards or platform-specific paths, not untested logic.
+
+---
+
+## Static analysis
+
+Five static analysers have been run against the codebase (library + examples).
+All pass with zero findings.
+
+### Clang Static Analyzer (scan-build)
+
+Part of LLVM. Wraps the build and injects analysis passes.
+
+```bash
+brew install llvm            # provides scan-build
+scan-build cmake -B build_sa -DCMAKE_BUILD_TYPE=Debug
+scan-build cmake --build build_sa
+```
+
+### clang-tidy
+
+LLVM linter/analyser. Requires a `compile_commands.json`.
+
+```bash
+cmake -B build_sa -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake --build build_sa
+
+clang-tidy -p build_sa \
+  --checks='clang-analyzer-*,bugprone-*,cert-*,misc-*,performance-*' \
+  zstd-seek.c
+```
+
+### clang --analyze (Apple Clang)
+
+Ships with Xcode. No extra installation needed on macOS.
+
+```bash
+clang --analyze \
+  -Xanalyzer -analyzer-checker=core \
+  -Xanalyzer -analyzer-checker=security \
+  -Xanalyzer -analyzer-checker=unix \
+  -Xanalyzer -analyzer-checker=deadcode \
+  -Xanalyzer -analyzer-output=text \
+  -I/opt/homebrew/include zstd-seek.c
+```
+
+### cppcheck
+
+Independent C/C++ analyser.
+
+```bash
+brew install cppcheck        # or apt install cppcheck
+
+cppcheck --enable=all --std=c99 \
+  --suppress=missingIncludeSystem \
+  --suppress=unusedFunction \
+  -I/opt/homebrew/include \
+  zstd-seek.c
+```
+
+`--suppress=unusedFunction` is needed because the public API functions are
+called by client code, not within the single translation unit.
+
+### Facebook Infer
+
+Download from <https://fbinfer.com> and add to `PATH`.
+
+```bash
+cmake -B build_sa -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake --build build_sa
+
+infer run --compilation-database build_sa/compile_commands.json
+```
+
+Infer detects null dereferences, resource leaks, buffer overruns, dead stores,
+and uninitialized values.
 
 ---
 
