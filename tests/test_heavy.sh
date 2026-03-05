@@ -148,14 +148,15 @@ compress_and_verify() {
     fi
     log_pass "${label}: read_all byte-exact"
 
-    # ── Random seek verification (10,000 ops) ────────────────────────
-    log_step "Random seek verification (10,000 ops)"
-    run "$TEST_SEEK" seek_random "$ZST_FILE" "$RAW_FILE" 42 10000
+    # ── Stress test: random byte-range reads (10,000 ops) ──────────
+    # seed=0 → auto-generate from time+pid (printed for reproduction)
+    log_step "Seek stress test (10,000 random byte-range reads, seed=auto)"
+    run "$TEST_SEEK" seek_stress "$ZST_FILE" "$RAW_FILE" 0 10000
     if ! assert_rc 0; then
-        log_fail "${label}: seek_random failed"
+        log_fail "${label}: seek_stress failed"
         return 1
     fi
-    log_pass "${label}: seek_random 10K ops"
+    log_pass "${label}: seek_stress 10K ops"
 
     # ── Chunked read verification (4 KB chunks) ─────────────────────
     log_step "Chunked read verification (4 KB chunks)"
@@ -171,33 +172,39 @@ compress_and_verify() {
 
 case "$TEST_NAME" in
     heavy_text)
+        # 300000 bytes ≈ 293 KB — not a power of 2, forces misaligned frame boundaries
         generate_text $((10 * 1048576))
-        compress_and_verify "text 10MB / 256K frames / level 3" 256K 3
+        compress_and_verify "text 10MB / 300000B frames / level 3" 300000 3
         ;;
 
     heavy_binary)
+        # 250000 bytes ≈ 244 KB — odd size, incompressible data
         generate_binary $((10 * 1048576))
-        compress_and_verify "binary 10MB / 256K frames / level 3" 256K 3
+        compress_and_verify "binary 10MB / 250000B frames / level 3" 250000 3
         ;;
 
     heavy_zeros)
+        # 999999 bytes ≈ 977 KB — just under 1 MB, extreme compression
         generate_zeros $((50 * 1048576))
-        compress_and_verify "zeros 50MB / 1M frames / level 3" 1M 3
+        compress_and_verify "zeros 50MB / 999999B frames / level 3" 999999 3
         ;;
 
     heavy_mixed)
+        # 500000 bytes ≈ 488 KB — mixed compressibility across frames
         generate_mixed $((20 * 1048576))
-        compress_and_verify "mixed 20MB / 512K frames / level 9" 512K 9
+        compress_and_verify "mixed 20MB / 500000B frames / level 9" 500000 9
         ;;
 
     heavy_level_max)
+        # 350000 bytes ≈ 342 KB — maximum compression level
         generate_text $((5 * 1048576))
-        compress_and_verify "text 5MB / 256K frames / level 22" 256K 22
+        compress_and_verify "text 5MB / 350000B frames / level 22" 350000 22
         ;;
 
     heavy_small_frames)
+        # 3000 bytes — many tiny non-aligned frames (~1747 frames for 5 MB)
         generate_binary $((5 * 1048576))
-        compress_and_verify "binary 5MB / 4K frames / level 1" 4K 1
+        compress_and_verify "binary 5MB / 3000B frames / level 1" 3000 1
         ;;
 
     heavy_single_frame)

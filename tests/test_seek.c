@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 
 #ifdef _WIN32
 #include "../windows-mmap.h"
@@ -2176,6 +2177,109 @@ static int test_decompress(int argc, char *argv[]) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+ * Test: seek_stress <zst_path> <raw_path> <seed> <num_ops>
+ *
+ * Stress test: random byte-range reads with verification.
+ *   - Picks a random start position and a random length (1–8192 bytes)
+ *   - Seeks via SEEK_SET, SEEK_CUR, or SEEK_END (alternating)
+ *   - Reads the full range and memcmp's against the raw reference
+ *   - Jumps forward and backward pseudo-randomly
+ *
+ * If seed==0 a time-based seed is generated and printed for reproduction.
+ * ══════════════════════════════════════════════════════════════════════════*/
+static int test_seek_stress(int argc, char *argv[]) {
+    if (argc < 4) { FAIL("usage: seek_stress <zst> <raw> <seed> <num_ops>"); return 1; }
+
+    size_t raw_size;
+    uint8_t *raw = read_file(argv[1], &raw_size);
+    if (!raw) { FAIL("cannot read raw file"); return 1; }
+    if (raw_size == 0) { FAIL("raw file is empty"); free(raw); return 1; }
+
+    ZSTDSeek_Context *ctx = ZSTDSeek_createFromFile(argv[0]);
+    if (!ctx) { FAIL("createFromFile failed"); free(raw); return 1; }
+
+    uint64_t seed = strtoull(argv[2], NULL, 10);
+    if (seed == 0) {
+        seed = (uint64_t)time(NULL) ^ ((uint64_t)getpid() << 16);
+        if (seed == 0) seed = 1;
+    }
+    size_t num_ops = (size_t)strtoull(argv[3], NULL, 10);
+
+    INFO("seek_stress: seed=%" PRIu64 " ops=%zu file_size=%zu", seed, num_ops, raw_size);
+
+    uint64_t state = seed;
+    uint8_t buf[8192];
+    size_t cross_boundary = 0;  /* count of reads spanning > 1 byte range */
+    size_t backward_jumps = 0;
+
+    for (size_t i = 0; i < num_ops; i++) {
+        /* Pick random start and length */
+        size_t start = (size_t)(xorshift64(&state) % raw_size);
+        size_t max_len = raw_size - start;
+        if (max_len > sizeof(buf)) max_len = sizeof(buf);
+        size_t len = (size_t)(xorshift64(&state) % max_len) + 1;
+
+        /* Choose seek method: alternate to exercise all paths */
+        unsigned method = (unsigned)(i % 3);
+        int32_t rc;
+        int64_t cur_pos = ZSTDSeek_tell(ctx);
+
+        if ((int64_t)start < cur_pos) backward_jumps++;
+
+        switch (method) {
+        case 0: /* SEEK_SET */
+            rc = ZSTDSeek_seek(ctx, (int64_t)start, SEEK_SET);
+            break;
+        case 1: { /* SEEK_CUR */
+            int64_t delta = (int64_t)start - cur_pos;
+            rc = ZSTDSeek_seek(ctx, delta, SEEK_CUR);
+            break;
+        }
+        case 2: { /* SEEK_END */
+            rc = ZSTDSeek_seek(ctx, (int64_t)start - (int64_t)raw_size, SEEK_END);
+            break;
+        }
+        default: rc = -1; break;
+        }
+
+        if (rc != 0) {
+            FAIL("op %zu: seek to %zu failed (method=%u, seed=%" PRIu64 ")", i, start, method, seed);
+            ZSTDSeek_free(ctx); free(raw); return 1;
+        }
+
+        /* Read the byte range */
+        int64_t nread = ZSTDSeek_read(buf, len, ctx);
+        if (nread != (int64_t)len) {
+            FAIL("op %zu: read at %zu len %zu returned %" PRId64 " (seed=%" PRIu64 ")",
+                 i, start, len, nread, seed);
+            ZSTDSeek_free(ctx); free(raw); return 1;
+        }
+
+        /* Verify against raw reference */
+        if (memcmp(buf, raw + start, len) != 0) {
+            /* Find first mismatch for diagnostics */
+            for (size_t j = 0; j < len; j++) {
+                if (buf[j] != raw[start + j]) {
+                    FAIL("op %zu: mismatch at offset %zu+%zu: got 0x%02x expected 0x%02x "
+                         "(range [%zu..%zu], seed=%" PRIu64 ")",
+                         i, start, j, buf[j], raw[start + j],
+                         start, start + len - 1, seed);
+                    break;
+                }
+            }
+            ZSTDSeek_free(ctx); free(raw); return 1;
+        }
+
+        if (len > 1) cross_boundary++;
+    }
+
+    PASS("seek_stress: %zu ops verified, %zu multi-byte, %zu backward "
+         "(seed=%" PRIu64 ")", num_ops, cross_boundary, backward_jumps, seed);
+    ZSTDSeek_free(ctx); free(raw);
+    return 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
  * Dispatch table
  * ══════════════════════════════════════════════════════════════════════════*/
 typedef struct {
@@ -2196,6 +2300,7 @@ static const TestEntry tests[] = {
     { "seek_cur_backward",      test_seek_cur_backward },
     { "seek_end",               test_seek_end },
     { "seek_random",            test_seek_random },
+    { "seek_stress",            test_seek_stress },
     { "seek_out_of_file",       test_seek_out_of_file },
     { "seek_cur_zero",          test_seek_cur_zero },
     { "seek_to_same_pos",       test_seek_to_same_pos },

@@ -206,13 +206,22 @@ If `t2sz` is not in `PATH`, the tests are skipped automatically (exit code 77).
 
 | Test                  | Data type         | Raw size | Frame size | Level | What it stresses                        |
 |-----------------------|-------------------|----------|------------|-------|-----------------------------------------|
-| `heavy_text`          | base64 text       | 10 MB    | 256 KB     | 3     | high compression ratio, text patterns   |
-| `heavy_binary`        | `/dev/urandom`    | 10 MB    | 256 KB     | 3     | nearly incompressible random data       |
-| `heavy_zeros`         | `/dev/zero`       | 50 MB    | 1 MB       | 3     | extreme compression ratio, large file   |
-| `heavy_mixed`         | text+binary+pattern | 20 MB  | 512 KB     | 9     | mixed compressibility per frame         |
-| `heavy_level_max`     | base64 text       | 5 MB     | 256 KB     | 22    | maximum compression level               |
-| `heavy_small_frames`  | `/dev/urandom`    | 5 MB     | 4 KB       | 1     | ~1280 frames, large jump table          |
+| `heavy_text`          | base64 text       | 10 MB    | 300000 B   | 3     | high compression ratio, text patterns   |
+| `heavy_binary`        | `/dev/urandom`    | 10 MB    | 250000 B   | 3     | nearly incompressible random data       |
+| `heavy_zeros`         | `/dev/zero`       | 50 MB    | 999999 B   | 3     | extreme compression ratio, large file   |
+| `heavy_mixed`         | text+binary+pattern | 20 MB  | 500000 B   | 9     | mixed compressibility per frame         |
+| `heavy_level_max`     | base64 text       | 5 MB     | 350000 B   | 22    | maximum compression level               |
+| `heavy_small_frames`  | `/dev/urandom`    | 5 MB     | 3000 B     | 1     | ~1747 frames, large jump table          |
 | `heavy_single_frame`  | `/dev/urandom`    | 20 MB    | 20 MB      | 3     | single huge frame                       |
+
+Frame sizes are deliberately **not** powers of two, so that frame boundaries
+never align with common buffer/page sizes. This forces seeks across misaligned
+frame edges.
+
+Each test includes a **seek stress** pass: 10,000 random byte-range reads
+(1–8192 bytes each) with pseudo-random forward/backward jumps and SEEK_SET,
+SEEK_CUR, SEEK_END alternation. The seed is auto-generated and printed in the
+test output for reproducibility in case of failure.
 
 ---
 
