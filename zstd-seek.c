@@ -304,8 +304,13 @@ int32_t ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const siz
             }
         }
 
-        size_t frameContentSize = ZSTD_getFrameContentSize(buff, size);
-        if(ZSTD_isError(frameContentSize)){//true if the uncompressed size is not known
+        const unsigned long long fcs = ZSTD_getFrameContentSize(buff, size);
+        size_t frameContentSize;
+        if(fcs == ZSTD_CONTENTSIZE_ERROR){
+            DEBUG("Error reading frame content size\n");
+            goto cleanup;
+        }
+        if(fcs == ZSTD_CONTENTSIZE_UNKNOWN){
             frameContentSize = 0;
 
             /* Lazy init: allocate probe resources on first unknown-size frame */
@@ -337,6 +342,12 @@ int32_t ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const siz
                 DEBUG("Unexpected EOF. Is the file truncated?\n");
                 goto cleanup;
             }
+        }else{
+            if(fcs > SIZE_MAX){
+                DEBUG("Frame content size exceeds SIZE_MAX\n");
+                goto cleanup;
+            }
+            frameContentSize = (size_t)fcs;
         }
 
         compressedPos += frameCompressedSize;
