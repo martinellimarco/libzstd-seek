@@ -566,6 +566,14 @@ int64_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context 
     
     ZSTDSeek_getJumpCoordinate(sctx, sctx->currentUncompressedPos); //trigger the generation of a jump table record, if needed
 
+    /* If the jump table is still empty after the init attempt, the data is
+     * unreadable (e.g. corrupted).  Return an error instead of silently
+     * pretending we are at EOF. */
+    if(sctx->jt->length == 0 && !sctx->jumpTableFullyInitialized){
+        DEBUG("Jump table empty after init attempt\n");
+        return ZSTDSEEK_ERR_READ;
+    }
+
     const size_t lastKnown = ZSTDSeek_lastKnownUncompressedFileSize(sctx);
     const size_t maxReadable = (lastKnown > sctx->currentUncompressedPos) ? lastKnown - sctx->currentUncompressedPos : 0;
     size_t toRead = maxReadable < outBuffSize ? maxReadable : outBuffSize;
