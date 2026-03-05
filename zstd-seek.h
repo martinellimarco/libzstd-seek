@@ -11,8 +11,8 @@
  * the LICENSE file) and the GPLv3 (found in the COPYING file).
 ****************************************************************** */
 
-#ifndef _ZSTD_SEEK_
-#define _ZSTD_SEEK_
+#ifndef ZSTD_SEEK_H
+#define ZSTD_SEEK_H
 
 #if defined (__cplusplus)
 extern "C" {
@@ -23,8 +23,8 @@ extern "C" {
 #include <stdbool.h>
 #include <zstd.h>
 
-#ifndef _ZSTD_SEEK_DEBUG_
-#define _ZSTD_SEEK_DEBUG_ 0
+#ifndef ZSTD_SEEK_DEBUG
+#define ZSTD_SEEK_DEBUG 0
 #endif
 
 #ifdef _WIN32
@@ -32,7 +32,7 @@ extern "C" {
 #else
 #define DEBUG(...) \
 do { \
-    if (_ZSTD_SEEK_DEBUG_){ \
+    if (ZSTD_SEEK_DEBUG){ \
         flockfile(stderr); \
         fprintf(stderr, "%s(): ", __func__); \
         fprintf(stderr, __VA_ARGS__); \

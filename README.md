@@ -25,7 +25,7 @@ cmake ..
 make
 ```
 
-If you want to get debug messages then `#define _ZSTD_SEEK_DEBUG_ 1`
+If you want to get debug messages then `#define ZSTD_SEEK_DEBUG 1`
 
 ## Testing
 
