@@ -2143,6 +2143,39 @@ static int test_error_seektable_bad_offsets(int argc, char *argv[]) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+ * Test: decompress <zst_path> <output_path>
+ * Decompress the entire .zst file and write raw output to a file.
+ * Used by test_heavy.sh for SHA256 verification.
+ * ══════════════════════════════════════════════════════════════════════════*/
+static int test_decompress(int argc, char *argv[]) {
+    if (argc < 2) { FAIL("usage: decompress <zst> <output>"); return 1; }
+    const char *zst_path = argv[0];
+    const char *out_path = argv[1];
+
+    ZSTDSeek_Context *ctx = ZSTDSeek_createFromFileWithoutJumpTable(zst_path);
+    if (!ctx) { FAIL("createFromFile failed for '%s'", zst_path); return 1; }
+
+    FILE *out = fopen(out_path, "wb");
+    if (!out) { FAIL("cannot open output file '%s'", out_path); ZSTDSeek_free(ctx); return 1; }
+
+    uint8_t buf[128 * 1024];
+    size_t total = 0;
+    int64_t nread;
+    while ((nread = ZSTDSeek_read(buf, sizeof(buf), ctx)) > 0) {
+        if (fwrite(buf, 1, (size_t)nread, out) != (size_t)nread) {
+            FAIL("write error at offset %zu", total);
+            fclose(out); ZSTDSeek_free(ctx); return 1;
+        }
+        total += (size_t)nread;
+    }
+
+    fclose(out);
+    ZSTDSeek_free(ctx);
+    PASS("decompress: %zu bytes written to '%s'", total, out_path);
+    return 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
  * Dispatch table
  * ══════════════════════════════════════════════════════════════════════════*/
 typedef struct {
@@ -2155,6 +2188,7 @@ static const TestEntry tests[] = {
     { "read_all",               test_read_all },
     { "read_byte_by_byte",      test_read_byte_by_byte },
     { "read_chunks",            test_read_chunks },
+    { "decompress",             test_decompress },
     /* Seek */
     { "seek_set_sequential",    test_seek_set_sequential },
     { "seek_set_backward",      test_seek_set_backward },

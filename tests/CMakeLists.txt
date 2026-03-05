@@ -80,6 +80,25 @@ function(add_error_test name test_id)
     set_tests_properties(${name} PROPERTIES TIMEOUT 30 SKIP_RETURN_CODE 77)
 endfunction()
 
+# ── helper: register a heavy (realistic) test ────────────────────────────────
+# Requires t2sz in PATH; skipped automatically if unavailable.
+# Use  ctest -LE heavy  to exclude these from a fast CI run.
+function(add_heavy_test name test_id)
+    add_test(
+        NAME    ${name}
+        COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test_heavy.sh
+                    $<TARGET_FILE:test_seek>
+                    ${BLOBS_DIR}
+                    ${test_id}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
+    set_tests_properties(${name} PROPERTIES
+        TIMEOUT 300
+        SKIP_RETURN_CODE 77
+        LABELS "heavy"
+    )
+endfunction()
+
 # ── LLVM_PROFILE_FILE for coverage builds ────────────────────────────────────
 if(COVERAGE)
     set(PROF_ENV "LLVM_PROFILE_FILE=${CMAKE_BINARY_DIR}/cov_%p.profraw")
@@ -188,6 +207,15 @@ add_error_test(err_mixed_format           error_mixed_format)
 add_error_test(err_corrupted_frame_data   error_corrupted_frame_data)
 add_error_test(err_seektable_bad_offsets  error_seektable_bad_offsets)
 
+# ── Heavy tests (realistic data via t2sz) ────────────────────────────────
+add_heavy_test(heavy_text           heavy_text)
+add_heavy_test(heavy_binary         heavy_binary)
+add_heavy_test(heavy_zeros          heavy_zeros)
+add_heavy_test(heavy_mixed          heavy_mixed)
+add_heavy_test(heavy_level_max      heavy_level_max)
+add_heavy_test(heavy_small_frames   heavy_small_frames)
+add_heavy_test(heavy_single_frame   heavy_single_frame)
+
 # ── Reference comparison tests (library vs zstd CLI) ────────────────────────
 add_reference_test(ref_4frames_seekable              1   4     1024    --seekable)
 add_reference_test(ref_4frames_no_seekable           2   4     1024)
@@ -241,6 +269,8 @@ foreach(tname
     ref_large_frames ref_no_content_size
     ref_vary_size ref_seekable_checksum
     ref_100frames_no_content_size
-    ref_many_small_frames ref_many_small_no_seekable)
+    ref_many_small_frames ref_many_small_no_seekable
+    heavy_text heavy_binary heavy_zeros heavy_mixed
+    heavy_level_max heavy_small_frames heavy_single_frame)
     set_test_env(${tname})
 endforeach()

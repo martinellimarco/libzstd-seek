@@ -13,18 +13,19 @@ The test suite exercises libzstd-seek across four dimensions:
 | **Static analysis**| 5 analysers (see below)        | null derefs, leaks, type bugs, dead code             |
 | **Code coverage** | LLVM coverage + llvm-cov       | dead or untested code paths                           |
 
-77 tests in total: 11 round-trip, 41 API, 12 error-path, and 13 reference comparison tests.
-All build configurations run the same test suite.
+84 tests in total: 11 round-trip, 41 API, 12 error-path, 13 reference comparison,
+and 7 heavy (realistic data) tests. All build configurations run the same test suite.
 
 ---
 
 ## Prerequisites
 
-| Dependency                         | Required for         | macOS                             | Linux                     |
-|------------------------------------|----------------------|-----------------------------------|---------------------------|
-| `cmake ≥ 3.16`                     | all builds           | `brew install cmake`              | `apt install cmake`       |
-| `libzstd-dev`                      | all builds           | `brew install zstd`               | `apt install libzstd-dev` |
-| LLVM (`llvm-cov`, `llvm-profdata`) | coverage report only | `brew install llvm`               | `apt install llvm`        |
+| Dependency                         | Required for         | macOS                                               | Linux                                               |
+|------------------------------------|----------------------|-----------------------------------------------------|-----------------------------------------------------|
+| `cmake ≥ 3.16`                     | all builds           | `brew install cmake`                                | `apt install cmake`                                 |
+| `libzstd-dev`                      | all builds           | `brew install zstd`                                 | `apt install libzstd-dev`                           |
+| LLVM (`llvm-cov`, `llvm-profdata`) | coverage report only | `brew install llvm`                                 | `apt install llvm`                                  |
+| `t2sz`                             | heavy tests only     | see [t2sz](https://github.com/martinellimarco/t2sz) | see [t2sz](https://github.com/martinellimarco/t2sz) |
 
 ---
 
@@ -188,12 +189,37 @@ bash ../tests/test_coverage.sh ../build_cov
 | `err_corrupted_frame_data`| corrupt 2nd frame payload → decompression error   |
 | `err_seektable_bad_offsets`| seektable dc=0xFFFFFFFF → fallback to frame scan |
 
+### Heavy tests (realistic data)
+
+These tests compress **real data blobs** (not PRNG) with [t2sz](https://github.com/martinellimarco/t2sz)
+at various frame sizes and compression levels. Each test verifies SHA256 hash
+integrity, byte-exact comparison, 10,000 random seeks, and chunked reads.
+
+They are labelled `heavy` in CTest and can be excluded from fast CI runs:
+
+```bash
+ctest -LE heavy               # run everything except heavy tests
+SKIP_HEAVY_TESTS=1 ctest      # alternative: skip via environment variable
+```
+
+If `t2sz` is not in `PATH`, the tests are skipped automatically (exit code 77).
+
+| Test                  | Data type         | Raw size | Frame size | Level | What it stresses                        |
+|-----------------------|-------------------|----------|------------|-------|-----------------------------------------|
+| `heavy_text`          | base64 text       | 10 MB    | 256 KB     | 3     | high compression ratio, text patterns   |
+| `heavy_binary`        | `/dev/urandom`    | 10 MB    | 256 KB     | 3     | nearly incompressible random data       |
+| `heavy_zeros`         | `/dev/zero`       | 50 MB    | 1 MB       | 3     | extreme compression ratio, large file   |
+| `heavy_mixed`         | text+binary+pattern | 20 MB  | 512 KB     | 9     | mixed compressibility per frame         |
+| `heavy_level_max`     | base64 text       | 5 MB     | 256 KB     | 22    | maximum compression level               |
+| `heavy_small_frames`  | `/dev/urandom`    | 5 MB     | 4 KB       | 1     | ~1280 frames, large jump table          |
+| `heavy_single_frame`  | `/dev/urandom`    | 20 MB    | 20 MB      | 3     | single huge frame                       |
+
 ---
 
 ## Coverage results
 
 Current numbers for `zstd-seek.c` measured on macOS Apple Silicon with all
-77 tests (Debug, LLVM coverage build):
+84 tests (Debug, LLVM coverage build):
 
 | Metric        | Value         |
 |---------------|---------------|
