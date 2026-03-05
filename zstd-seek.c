@@ -295,7 +295,7 @@ int32_t ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const siz
     int32_t result = -1;
     int32_t reachedTarget = 0;
 
-    while (size > 0 && (frameCompressedSize = ZSTD_findFrameCompressedSize(buff, size))>0 && !ZSTD_isError(frameCompressedSize)) {
+    while (size > 0 && (frameCompressedSize = ZSTD_findFrameCompressedSize(buff, size))>0 && !ZSTD_isError(frameCompressedSize) && frameCompressedSize <= size) {
         const uint32_t magic = load_le32(buff);
         if((magic & ZSTD_MAGIC_SKIPPABLE_MASK) == ZSTD_MAGIC_SKIPPABLE_START){
             compressedPos += frameCompressedSize;
@@ -631,7 +631,8 @@ int64_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context 
                 break;
             }
             sctx->lastFrameCompressedSize = ZSTD_findFrameCompressedSize(sctx->inBuff, remaining);
-            if(ZSTD_isError(sctx->lastFrameCompressedSize) || sctx->lastFrameCompressedSize == 0){
+            if(ZSTD_isError(sctx->lastFrameCompressedSize) || sctx->lastFrameCompressedSize == 0
+               || sctx->lastFrameCompressedSize > remaining){
                 break;
             }
 
