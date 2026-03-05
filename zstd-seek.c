@@ -149,7 +149,7 @@ int32_t ZSTDSeek_initializeJumpTable(ZSTDSeek_Context *sctx){
 #elif defined(_WIN32)
   #define ZSTDSEEK_LITTLE_ENDIAN 1
 #else
-  static bool ZSTDSeek_isLittleEndian(void){
+  static inline bool ZSTDSeek_isLittleEndian(void){
       const int x = 1;
       return *(const char*)(&x) == 1;
   }
