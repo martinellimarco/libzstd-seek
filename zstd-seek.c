@@ -245,6 +245,7 @@ int32_t ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const siz
                                 }
                                 /* Malformed seektable: clear partial records, fall through to frame scan */
                                 sctx->jt->length = 0;
+                                sctx->jumpTableFullyInitialized = 0;
                             }
                         }
                     }
