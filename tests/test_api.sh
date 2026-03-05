@@ -328,6 +328,16 @@ case "$TEST_NAME" in
         log_pass "$TEST_NAME"
         ;;
 
+    compressed_tell_absolute)
+        # Single large frame to stress the decompression loop
+        "$GEN_SEEKABLE" 42 1 1048576 "$WORK_DIR/large1f.zst" \
+            --dump-raw "$WORK_DIR/large1f.raw"
+        log_step "$TEST_NAME (1 frame × 1 MiB, absolute value check)"
+        run "$TEST_SEEK" "$TEST_NAME" "$WORK_DIR/large1f.zst"
+        assert_rc 0 || exit 1
+        log_pass "$TEST_NAME"
+        ;;
+
     # ── compressedTell coverage tests ──────────────────────────────────────
     compressed_tell_monotonic)
         gen_multiframe

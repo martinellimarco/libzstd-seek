@@ -962,6 +962,58 @@ static int test_compressed_tell_seek(int argc, char *argv[]) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+ * Test: compressed_tell_absolute <zst_path>
+ * Read sequentially and verify compressedTell() never exceeds the
+ * compressed file size.  Uses a single large frame to force many
+ * iterations of the inner ZSTD_decompressStream loop per read() call.
+ * This catches the cumulative overcount bug where input.pos (cumulative
+ * within a frame) was accumulated instead of the delta.
+ * ══════════════════════════════════════════════════════════════════════════*/
+static int test_compressed_tell_absolute(int argc, char *argv[]) {
+    if (argc < 1) { FAIL("usage: compressed_tell_absolute <zst>"); return 1; }
+
+    /* Get compressed file size via stat */
+    struct stat st;
+    if (stat(argv[0], &st) != 0) { FAIL("stat(%s) failed", argv[0]); return 1; }
+    const size_t compressed_size = (size_t)st.st_size;
+
+    ZSTDSeek_Context *ctx = ZSTDSeek_createFromFile(argv[0]);
+    if (!ctx) { FAIL("createFromFile failed"); return 1; }
+
+    uint8_t buf[4096];
+    size_t total_read = 0;
+    size_t reads = 0;
+    int64_t n;
+
+    while ((n = ZSTDSeek_read(buf, sizeof(buf), ctx)) > 0) {
+        total_read += (size_t)n;
+        reads++;
+        int64_t ct = ZSTDSeek_compressedTell(ctx);
+        if (ct < 0 || (size_t)ct > compressed_size) {
+            FAIL("read #%zu (total=%zu): compressedTell=%" PRId64
+                 " exceeds compressed file size=%zu",
+                 reads, total_read, ct, compressed_size);
+            ZSTDSeek_free(ctx);
+            return 1;
+        }
+    }
+
+    /* At EOF, compressedTell should equal compressed file size */
+    int64_t ct_final = ZSTDSeek_compressedTell(ctx);
+    if ((size_t)ct_final != compressed_size) {
+        FAIL("at EOF: compressedTell=%" PRId64 " expected=%zu", ct_final, compressed_size);
+        ZSTDSeek_free(ctx);
+        return 1;
+    }
+
+    PASS("compressed_tell_absolute: %zu reads, %zu bytes decompressed, "
+         "final compressedTell=%" PRId64 " == compressed size=%zu",
+         reads, total_read, ct_final, compressed_size);
+    ZSTDSeek_free(ctx);
+    return 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
  * Test: seek_forward_large <zst_path> <raw_path>
  * Perform large SEEK_CUR forwards within frames and verify data against
  * the raw reference.  Exercises the discard loop with bigger skips than
@@ -2325,6 +2377,7 @@ static const TestEntry tests[] = {
     { "compressed_tell",        test_compressed_tell },
     { "compressed_tell_monotonic", test_compressed_tell_monotonic },
     { "compressed_tell_seek",   test_compressed_tell_seek },
+    { "compressed_tell_absolute", test_compressed_tell_absolute },
     /* Seek (large) */
     { "seek_forward_large",     test_seek_forward_large },
     /* Edge cases */

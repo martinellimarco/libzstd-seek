@@ -13,7 +13,7 @@ The test suite exercises libzstd-seek across four dimensions:
 | **Static analysis**| 5 analysers (see below)        | null derefs, leaks, type bugs, dead code             |
 | **Code coverage** | LLVM coverage + llvm-cov       | dead or untested code paths                           |
 
-84 tests in total: 11 round-trip, 41 API, 12 error-path, 13 reference comparison,
+85 tests in total: 11 round-trip, 42 API, 12 error-path, 13 reference comparison,
 and 7 heavy (realistic data) tests. All build configurations run the same test suite.
 
 ---
@@ -108,14 +108,14 @@ bash ../tests/test_coverage.sh ../build_cov
 
 ### API tests — context creation
 
-| Test                     | API variant                                  |
-|--------------------------|----------------------------------------------|
-| `api_create_file`        | `ZSTDSeek_createFromFile`                    |
-| `api_create_file_no_jt`  | `createFromFileWithoutJumpTable` + init      |
-| `api_create_buffer`      | `ZSTDSeek_create` (from memory buffer)       |
-| `api_create_buffer_no_jt`| `createWithoutJumpTable` + init              |
-| `api_create_fd`          | `createFromFileDescriptor` + fileno check    |
-| `api_create_fd_no_jt`    | `createFromFileDescriptorWithoutJumpTable`   |
+| Test                      | API variant                                |
+|---------------------------|--------------------------------------------|
+| `api_create_file`         | `ZSTDSeek_createFromFile`                  |
+| `api_create_file_no_jt`   | `createFromFileWithoutJumpTable` + init    |
+| `api_create_buffer`       | `ZSTDSeek_create` (from memory buffer)     |
+| `api_create_buffer_no_jt` | `createWithoutJumpTable` + init            |
+| `api_create_fd`           | `createFromFileDescriptor` + fileno check  |
+| `api_create_fd_no_jt`     | `createFromFileDescriptorWithoutJumpTable` |
 
 ### API tests — seek operations
 
@@ -141,11 +141,11 @@ bash ../tests/test_coverage.sh ../build_cov
 
 ### API tests — seekable format
 
-| Test                     | What is covered                                     |
-|--------------------------|-----------------------------------------------------|
-| `api_seekable_basic`     | file with seekable footer: fast init + read/seek    |
-| `api_seekable_checksum`  | seekable format with checksum entries               |
-| `api_seekable_vs_scan`   | seekable vs non-seekable produce identical results  |
+| Test                     | What is covered                                                         |
+|--------------------------|-------------------------------------------------------------------------|
+| `api_seekable_basic`     | file with seekable footer: fast init + read/seek                        |
+| `api_seekable_checksum`  | seekable format with checksum entries                                   |
+| `api_seekable_vs_scan`   | seekable vs non-seekable produce identical results                      |
 | `api_seekable_malformed` | 4 corrupted footers: reserved bits, bad magic, size, numFrames overflow |
 
 ### API tests — info and read patterns
@@ -160,6 +160,7 @@ bash ../tests/test_coverage.sh ../build_cov
 | `api_compressed_tell`      | `compressedTell` coherence                                       |
 | `api_compressed_tell_mono` | `compressedTell` never decreases during 10-byte sequential reads |
 | `api_compressed_tell_seek` | `compressedTell` matches JT at frame boundaries after seek       |
+| `api_compressed_tell_abs`  | `compressedTell` ≤ compressed file size (1×1 MiB frame)          |
 | `api_seek_forward_large`   | `seek(+500, SEEK_CUR)` within frame, data verified vs raw        |
 | `api_read_byte_by_byte`    | sequential 1-byte reads                                          |
 | `api_read_chunks`          | chunked reads with verification                                  |
@@ -170,7 +171,7 @@ bash ../tests/test_coverage.sh ../build_cov
 | `api_seek_cur_zero`        | `seek(0, SEEK_CUR)` no-op at start/mid/eof                       |
 | `api_seek_to_same_pos`     | seek to current position (non-zero) twice                        |
 | `api_fileno_buffer`        | `fileno` returns -1 for buffer-created context                   |
-| `api_read_zero_bytes`      | `read(buf, 0, ctx)` returns 0 at start, mid, and EOF            |
+| `api_read_zero_bytes`      | `read(buf, 0, ctx)` returns 0 at start, mid, and EOF             |
 
 ### Error paths
 

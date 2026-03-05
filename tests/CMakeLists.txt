@@ -175,6 +175,7 @@ add_api_test(api_fileno                   fileno_check)
 add_api_test(api_compressed_tell          compressed_tell)
 add_api_test(api_compressed_tell_mono    compressed_tell_monotonic)
 add_api_test(api_compressed_tell_seek    compressed_tell_seek)
+add_api_test(api_compressed_tell_abs     compressed_tell_absolute)
 
 # ── API: seek (large forward) ────────────────────────────────────────────────
 add_api_test(api_seek_forward_large      seek_forward_large)
@@ -252,6 +253,7 @@ foreach(tname
     api_file_size api_last_known_size api_frame_count
     api_is_multiframe api_fileno api_compressed_tell
     api_compressed_tell_mono api_compressed_tell_seek
+    api_compressed_tell_abs
     api_seek_forward_large
     api_read_byte_by_byte api_read_chunks
     api_frame_boundary api_single_frame api_large_read
