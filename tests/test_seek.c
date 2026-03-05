@@ -1830,10 +1830,11 @@ static int test_seek_to_same_pos(int argc, char *argv[]) {
 
 /* ══════════════════════════════════════════════════════════════════════════
  * Test: seekable_malformed_footer <zst_path> <raw_path>
- * Read a seekable .zst into memory, corrupt the seekable footer in 3 ways:
+ * Read a seekable .zst into memory, corrupt the seekable footer in 4 ways:
  *   (a) reserved bits in SFD byte
  *   (b) skippable header magic
  *   (c) frame size field
+ *   (d) numFrames set to 0xFFFFFFFF (exceeds maxEntries)
  * In each case the library should ignore the footer and fall back to
  * frame-by-frame scanning, still producing correct data.
  * ══════════════════════════════════════════════════════════════════════════*/
@@ -1935,9 +1936,33 @@ static int test_seekable_malformed_footer(int argc, char *argv[]) {
         }
     }
 
+    /* ── (d) Inflate numFrames far beyond what the buffer can hold ────────
+     * Set numFrames to 0xFFFFFFFF → library detects numFrames > maxEntries
+     * and ignores the seektable, falling back to frame scanning. */
+    memcpy(zst, zst_orig, zst_size);
+    {
+        /* numFrames is at the start of the footer (last 9 bytes) */
+        uint8_t *footer = zst + (zst_size - 9);
+        uint32_t bad_numFrames = 0xFFFFFFFFU;
+        memcpy(footer, &bad_numFrames, 4);
+
+        ctx = ZSTDSeek_create(zst, zst_size);
+        if (!ctx) {
+            FAIL("(d) numFrames overflow: create failed"); failures++;
+        } else {
+            int64_t n = ZSTDSeek_read(out, raw_size, ctx);
+            if (n != (int64_t)raw_size || memcmp(out, raw, raw_size) != 0) {
+                FAIL("(d) numFrames overflow: data mismatch (n=%" PRId64 ")", n); failures++;
+            } else {
+                PASS("(d) numFrames overflow: fallback to scanning OK");
+            }
+            ZSTDSeek_free(ctx);
+        }
+    }
+
     free(out); free(zst); free(raw); free(zst_orig);
-    if (failures > 0) { FAIL("seekable_malformed_footer: %d/3 sub-tests failed", failures); return 1; }
-    PASS("seekable_malformed_footer: all 3 corruption variants handled gracefully");
+    if (failures > 0) { FAIL("seekable_malformed_footer: %d/4 sub-tests failed", failures); return 1; }
+    PASS("seekable_malformed_footer: all 4 corruption variants handled gracefully");
     return 0;
 }
 

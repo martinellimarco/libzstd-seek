@@ -12,7 +12,7 @@ The test suite exercises libzstd-seek across four dimensions:
 | **Memory safety** | AddressSanitizer + UBSanitizer | buffer overflows, use-after-free, undefined behaviour |
 | **Code coverage** | LLVM coverage + llvm-cov       | dead or untested code paths                           |
 
-74 tests in total: 11 round-trip, 40 API, 10 error-path, and 13 reference comparison tests.
+77 tests in total: 11 round-trip, 41 API, 12 error-path, and 13 reference comparison tests.
 All build configurations run the same test suite.
 
 ---
@@ -144,7 +144,7 @@ bash ../tests/test_coverage.sh ../build_cov
 | `api_seekable_basic`     | file with seekable footer: fast init + read/seek    |
 | `api_seekable_checksum`  | seekable format with checksum entries               |
 | `api_seekable_vs_scan`   | seekable vs non-seekable produce identical results  |
-| `api_seekable_malformed` | 3 corrupted footers: reserved bits, bad magic, size |
+| `api_seekable_malformed` | 4 corrupted footers: reserved bits, bad magic, size, numFrames overflow |
 
 ### API tests — info and read patterns
 
@@ -168,6 +168,7 @@ bash ../tests/test_coverage.sh ../build_cov
 | `api_seek_cur_zero`        | `seek(0, SEEK_CUR)` no-op at start/mid/eof                       |
 | `api_seek_to_same_pos`     | seek to current position (non-zero) twice                        |
 | `api_fileno_buffer`        | `fileno` returns -1 for buffer-created context                   |
+| `api_read_zero_bytes`      | `read(buf, 0, ctx)` returns 0 at start, mid, and EOF            |
 
 ### Error paths
 
@@ -183,13 +184,15 @@ bash ../tests/test_coverage.sh ../build_cov
 | `err_read_past_eof`       | read at EOF returns short count then 0            |
 | `err_corrupted_header`    | zstd with corrupted magic number → create fails   |
 | `err_mixed_format`        | valid ZSTD + garbage, create with valid-only size |
+| `err_corrupted_frame_data`| corrupt 2nd frame payload → decompression error   |
+| `err_seektable_bad_offsets`| seektable dc=0xFFFFFFFF → fallback to frame scan |
 
 ---
 
 ## Coverage results
 
 Current numbers for `zstd-seek.c` measured on macOS Apple Silicon with all
-74 tests (Debug, LLVM coverage build):
+77 tests (Debug, LLVM coverage build):
 
 | Metric        | Value         |
 |---------------|---------------|
@@ -202,12 +205,13 @@ Re-run `tests/test_coverage.sh` after changes to get exact figures.
 ### What is not covered (and why)
 
 - **Big-endian path in `ZSTDSeek_fromLE32`** — x86-64 and ARM64 are always little-endian.
+  Compile-time detection via `__BYTE_ORDER__` / `_WIN32` eliminates the runtime
+  fallback on GCC/Clang/MSVC.
 - **`mmap()` failure** — requires OS-level fault injection.
 - **`malloc` failure paths** — `ZSTDSeek_newJumpTable`, `ZSTDSeek_createWithoutJumpTable` OOM guards require memory exhaustion.
 - **`stat()` failure in `createFromFile`** — requires filesystem-level fault injection.
-- **Decompression error inside `initializeJumpTableUpUntilPos`** — requires corrupted frame that passes `ZSTD_findFrameCompressedSize` but fails `ZSTD_decompressStream`.
-- **Decompression error inside `ZSTDSeek_read`** — requires mid-stream corruption that passes frame header checks.
-- **`ZSTDSeek_fileno` with NULL** — the function does not guard against NULL (would crash); use `error_null` pattern instead.
+- **`SIZE_MAX` guard in `createFromFile` / `createFromFileDescriptor`** — requires a file larger than `SIZE_MAX` on a 32-bit system with large file support.
+- **`size_t` overflow guards in frame scan** (`compressedPos`, `uncompressedPos`, `frameContentSize` probing) — require accumulated positions exceeding `SIZE_MAX`, which is only possible on 32-bit with very large streams.
 
 These are defensive guards or platform-specific paths, not untested logic.
 
