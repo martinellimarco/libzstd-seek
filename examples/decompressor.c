@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later OR MIT
 /* ******************************************************************
  * libzstd-seek
  * Copyright (c) 2020, Martinelli Marco
@@ -23,10 +24,11 @@ static char* createOutFilename(const char* filename){
     size_t const inL = strlen(filename);
     size_t const outL = inL - 4;
     char* const outSpace = (char*)malloc(outL+1);
+    if(!outSpace) return NULL;
     memset(outSpace, 0, outL);
     strncat(outSpace, filename, outL);
     outSpace[outL] = 0;
-    return (char*)outSpace;
+    return outSpace;
 }
 
 int main(int argc, const char** argv) {
@@ -43,9 +45,16 @@ int main(int argc, const char** argv) {
     }
 
     const char* outFileName = createOutFilename(argv[1]);
+    if(!outFileName){
+        fprintf(stderr, "Can't allocate output filename\n");
+        ZSTDSeek_free(sctx);
+        return -1;
+    }
     FILE* outF = fopen(outFileName, "wb");
     if(!outF){
         fprintf(stderr, "Can't open out file %s\n", outFileName);
+        free((void*)outFileName);
+        ZSTDSeek_free(sctx);
         return -1;
     }
     printf("Decompressing to %s\n", outFileName);

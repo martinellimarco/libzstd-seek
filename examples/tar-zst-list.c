@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later OR MIT
 /* ******************************************************************
  * libzstd-seek
  * Copyright (c) 2020, Martinelli Marco
@@ -80,6 +81,7 @@ int main(int argc, const char** argv) {
     ZSTDSeek_JumpTable *jt = ZSTDSeek_getJumpTableOfContext(sctx);
     if(!jt){
         fprintf(stderr, "Can't get the jump table from the context\n");
+        ZSTDSeek_free(sctx);
         return -1;
     }
     printJumpTable(jt);
