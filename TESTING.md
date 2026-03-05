@@ -223,24 +223,37 @@ These are defensive guards or platform-specific paths, not untested logic.
 Five static analysers have been run against the codebase (library + examples).
 All pass with zero findings.
 
+### Preparation
+
+Several tools (clang-tidy, Infer) need a `compile_commands.json` that CMake
+generates automatically. Build once and reuse for all of them:
+
+```bash
+cmake -B build_sa -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake --build build_sa
+# build_sa/compile_commands.json is now ready
+```
+
+> **Note:** `compile_commands.json` contains absolute paths and is specific to
+> your machine — it cannot be checked in. Re-run the commands above whenever
+> you move the source tree or change include paths.
+
 ### Clang Static Analyzer (scan-build)
 
 Part of LLVM. Wraps the build and injects analysis passes.
 
 ```bash
-brew install llvm            # provides scan-build
-scan-build cmake -B build_sa -DCMAKE_BUILD_TYPE=Debug
-scan-build cmake --build build_sa
+brew install llvm            # provides scan-build (or apt install clang-tools)
+scan-build cmake --build build_sa --clean-first
 ```
 
 ### clang-tidy
 
-LLVM linter/analyser. Requires a `compile_commands.json`.
+LLVM linter/analyser. Uses the `compile_commands.json` from the preparation
+step above.
 
 ```bash
-cmake -B build_sa -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-cmake --build build_sa
-
+# llvm is already installed from the scan-build step
 clang-tidy -p build_sa \
   --checks='clang-analyzer-*,bugprone-*,cert-*,misc-*,performance-*' \
   zstd-seek.c
@@ -257,8 +270,11 @@ clang --analyze \
   -Xanalyzer -analyzer-checker=unix \
   -Xanalyzer -analyzer-checker=deadcode \
   -Xanalyzer -analyzer-output=text \
-  -I/opt/homebrew/include zstd-seek.c
+  $(pkg-config --cflags libzstd) zstd-seek.c
 ```
+
+On systems without `pkg-config`, replace `$(pkg-config --cflags libzstd)` with
+the appropriate `-I` path (e.g. `-I/opt/homebrew/include` on macOS Homebrew).
 
 ### cppcheck
 
@@ -270,7 +286,7 @@ brew install cppcheck        # or apt install cppcheck
 cppcheck --enable=all --std=c99 \
   --suppress=missingIncludeSystem \
   --suppress=unusedFunction \
-  -I/opt/homebrew/include \
+  $(pkg-config --cflags libzstd) \
   zstd-seek.c
 ```
 
@@ -282,9 +298,6 @@ called by client code, not within the single translation unit.
 Download from <https://fbinfer.com> and add to `PATH`.
 
 ```bash
-cmake -B build_sa -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-cmake --build build_sa
-
 infer run --compilation-database build_sa/compile_commands.json
 ```
 
