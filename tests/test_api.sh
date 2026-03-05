@@ -320,6 +320,14 @@ case "$TEST_NAME" in
         log_pass "$TEST_NAME"
         ;;
 
+    read_zero_bytes)
+        gen_standard --seekable
+        log_step "$TEST_NAME"
+        run "$TEST_SEEK" "$TEST_NAME" "$WORK_DIR/test.zst"
+        assert_rc 0 || exit 1
+        log_pass "$TEST_NAME"
+        ;;
+
     # ── compressedTell coverage tests ──────────────────────────────────────
     compressed_tell_monotonic)
         gen_multiframe

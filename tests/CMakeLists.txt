@@ -172,6 +172,7 @@ add_api_test(api_read_too_much            read_too_much)
 add_api_test(api_seek_cur_zero           seek_cur_zero)
 add_api_test(api_seek_to_same_pos        seek_to_same_pos)
 add_api_test(api_fileno_buffer           fileno_buffer)
+add_api_test(api_read_zero_bytes         read_zero_bytes)
 
 # ── Error paths ──────────────────────────────────────────────────────────────
 add_error_test(err_null                   error_null)
@@ -184,6 +185,8 @@ add_error_test(err_seek_invalid_origin    error_seek_invalid_origin)
 add_error_test(err_read_past_eof          error_read_past_eof)
 add_error_test(err_corrupted_header       error_corrupted_header)
 add_error_test(err_mixed_format           error_mixed_format)
+add_error_test(err_corrupted_frame_data   error_corrupted_frame_data)
+add_error_test(err_seektable_bad_offsets  error_seektable_bad_offsets)
 
 # ── Reference comparison tests (library vs zstd CLI) ────────────────────────
 add_reference_test(ref_4frames_seekable              1   4     1024    --seekable)
@@ -226,10 +229,12 @@ foreach(tname
     api_frame_boundary api_single_frame api_large_read
     api_read_too_much
     api_seek_cur_zero api_seek_to_same_pos api_fileno_buffer
+    api_read_zero_bytes
     err_null err_empty_file err_truncated err_invalid_format
     err_seek_negative err_seek_beyond
     err_seek_invalid_origin err_read_past_eof
     err_corrupted_header err_mixed_format
+    err_corrupted_frame_data err_seektable_bad_offsets
     ref_4frames_seekable ref_4frames_no_seekable
     ref_100frames_seekable ref_100frames_no_seekable
     ref_single_frame ref_single_frame_seekable

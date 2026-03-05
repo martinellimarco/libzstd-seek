@@ -108,6 +108,26 @@ case "$TEST_NAME" in
         log_pass "error_mixed_format"
         ;;
 
+    error_corrupted_frame_data)
+        # Need a multi-frame file without seekable footer (so JT is built by scan)
+        "$GEN_SEEKABLE" 42 4 1024 "$WORK_DIR/multi.zst"
+        log_step "error_corrupted_frame_data"
+        run "$TEST_SEEK" error_corrupted_frame_data "$WORK_DIR/multi.zst"
+        assert_rc 0 || exit 1
+        log_pass "error_corrupted_frame_data"
+        ;;
+
+    error_seektable_bad_offsets)
+        # Need a seekable file + its raw data for verification
+        "$GEN_SEEKABLE" 42 4 1024 "$WORK_DIR/seekable.zst" \
+            --dump-raw "$WORK_DIR/seekable.raw" --seekable
+        log_step "error_seektable_bad_offsets"
+        run "$TEST_SEEK" error_seektable_bad_offsets \
+            "$WORK_DIR/seekable.zst" "$WORK_DIR/seekable.raw"
+        assert_rc 0 || exit 1
+        log_pass "error_seektable_bad_offsets"
+        ;;
+
     *)
         echo "Unknown error test: $TEST_NAME" >&2
         exit 1

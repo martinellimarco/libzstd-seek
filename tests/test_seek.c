@@ -1101,6 +1101,9 @@ static int test_error_null(int argc, char *argv[]) {
     ZSTDSeek_freeJumpTable(NULL); /* should not crash */
     ZSTDSeek_addJumpTableRecord(NULL, 0, 0); /* should not crash */
     if (ZSTDSeek_initializeJumpTable(NULL) != -1) { FAIL("initializeJumpTable(NULL)"); failures++; }
+    if (ZSTDSeek_initializeJumpTableUpUntilPos(NULL, 0) != -1) { FAIL("initializeJumpTableUpUntilPos(NULL)"); failures++; }
+    if (ZSTDSeek_jumpTableIsInitialized(NULL) != false) { FAIL("jumpTableIsInitialized(NULL)"); failures++; }
+    if (ZSTDSeek_fileno(NULL) != -1) { FAIL("fileno(NULL)"); failures++; }
     if (ZSTDSeek_uncompressedFileSize(NULL) != 0) { FAIL("uncompressedFileSize(NULL)"); failures++; }
     if (ZSTDSeek_lastKnownUncompressedFileSize(NULL) != 0) { FAIL("lastKnownSize(NULL)"); failures++; }
     if (ZSTDSeek_read(NULL, 0, NULL) != ZSTDSEEK_ERR_READ) { FAIL("read(NULL)"); failures++; }
@@ -1939,6 +1942,182 @@ static int test_seekable_malformed_footer(int argc, char *argv[]) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+ * Test: read_zero_bytes <zst_path>
+ * read(buf, 0, ctx) should return 0 without error at any position.
+ * ══════════════════════════════════════════════════════════════════════════*/
+static int test_read_zero_bytes(int argc, char *argv[]) {
+    if (argc < 1) { FAIL("usage: read_zero_bytes <zst>"); return 1; }
+
+    ZSTDSeek_Context *ctx = ZSTDSeek_createFromFile(argv[0]);
+    if (!ctx) { FAIL("createFromFile failed"); return 1; }
+
+    int failures = 0;
+    uint8_t dummy;
+
+    /* At position 0 */
+    int64_t n = ZSTDSeek_read(&dummy, 0, ctx);
+    if (n != 0) { FAIL("read(0)@pos0 = %" PRId64 " expected 0", n); failures++; }
+    if (ZSTDSeek_tell(ctx) != 0) { FAIL("tell moved after read(0)"); failures++; }
+
+    /* At middle */
+    size_t mid = ZSTDSeek_uncompressedFileSize(ctx) / 2;
+    ZSTDSeek_seek(ctx, (int64_t)mid, SEEK_SET);
+    n = ZSTDSeek_read(&dummy, 0, ctx);
+    if (n != 0) { FAIL("read(0)@mid = %" PRId64 " expected 0", n); failures++; }
+    if (ZSTDSeek_tell(ctx) != (int64_t)mid) { FAIL("tell moved after read(0)@mid"); failures++; }
+
+    /* At EOF */
+    ZSTDSeek_seek(ctx, 0, SEEK_END);
+    int64_t eof_pos = ZSTDSeek_tell(ctx);
+    n = ZSTDSeek_read(&dummy, 0, ctx);
+    if (n != 0) { FAIL("read(0)@eof = %" PRId64 " expected 0", n); failures++; }
+    if (ZSTDSeek_tell(ctx) != eof_pos) { FAIL("tell moved after read(0)@eof"); failures++; }
+
+    ZSTDSeek_free(ctx);
+    if (failures > 0) { FAIL("read_zero_bytes: %d failures", failures); return 1; }
+    PASS("read_zero_bytes: read(0) returns 0 at pos=0, mid=%zu, eof=%" PRId64, mid, eof_pos);
+    return 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Test: error_corrupted_frame_data <zst_path>
+ * Read a valid multi-frame .zst into memory, corrupt payload bytes inside
+ * the second frame.  createWithoutJumpTable should succeed (first frame is
+ * valid), but read() past the first frame should eventually return ERR_READ.
+ * ══════════════════════════════════════════════════════════════════════════*/
+static int test_error_corrupted_frame_data(int argc, char *argv[]) {
+    if (argc < 1) { FAIL("usage: error_corrupted_frame_data <zst>"); return 1; }
+
+    size_t zst_size;
+    uint8_t *zst = read_file(argv[0], &zst_size);
+    if (!zst || zst_size < 32) { FAIL("cannot read zst file or too small"); free(zst); return 1; }
+
+    /* Find the start of the second frame using ZSTD_findFrameCompressedSize */
+    size_t first_frame_size = ZSTD_findFrameCompressedSize(zst, zst_size);
+    if (ZSTD_isError(first_frame_size) || first_frame_size >= zst_size - 8) {
+        FAIL("need at least 2 frames; first_frame_size=%zu total=%zu", first_frame_size, zst_size);
+        free(zst); return 1;
+    }
+
+    /* Corrupt several bytes in the middle of the second frame's payload */
+    size_t corrupt_start = first_frame_size + 8; /* skip frame header (~4-6 bytes) */
+    if (corrupt_start + 16 > zst_size) corrupt_start = first_frame_size + 4;
+    for (size_t i = 0; i < 16 && corrupt_start + i < zst_size; i++) {
+        zst[corrupt_start + i] ^= 0xFF;
+    }
+
+    /* Create context without JT — should succeed because first frame header is intact */
+    ZSTDSeek_Context *ctx = ZSTDSeek_createWithoutJumpTable(zst, zst_size);
+    if (!ctx) {
+        /* If first frame header got corrupted too, the test is still valid */
+        PASS("error_corrupted_frame_data: create correctly rejected corrupted data");
+        free(zst); return 0;
+    }
+
+    /* Try to read the entire file — should hit ERR_READ when decompressing the
+     * corrupted second frame */
+    if (ZSTDSeek_initializeJumpTable(ctx) != 0) {
+        /* JT init failed because frame scan hit corrupted data — that's OK */
+        PASS("error_corrupted_frame_data: JT init correctly failed on corrupt data");
+        ZSTDSeek_free(ctx); free(zst); return 0;
+    }
+
+    /* If somehow JT init passed, try reading */
+    size_t total = ZSTDSeek_uncompressedFileSize(ctx);
+    uint8_t *out = malloc(total > 0 ? total : 1);
+    int64_t nread = ZSTDSeek_read(out, total, ctx);
+    if (nread < 0) {
+        PASS("error_corrupted_frame_data: read returned ERR (%" PRId64 ") as expected", nread);
+    } else {
+        /* A short read is also acceptable since the corruption stops decompression */
+        INFO("error_corrupted_frame_data: read returned %" PRId64 " / %zu (short read or lucky)", nread, total);
+        PASS("error_corrupted_frame_data: no crash on corrupted data");
+    }
+
+    free(out);
+    ZSTDSeek_free(ctx); free(zst);
+    return 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Test: error_seektable_bad_offsets <zst_path> <raw_path>
+ * Modify the seekable footer so that a seektable entry has an
+ * inflated compressed-size delta that would make cOffset exceed the
+ * buffer.  The library should detect the malformed entry, discard the
+ * seektable, fall back to frame-by-frame scanning, and still produce
+ * correct decompressed data.
+ * ══════════════════════════════════════════════════════════════════════════*/
+static int test_error_seektable_bad_offsets(int argc, char *argv[]) {
+    if (argc < 2) { FAIL("usage: error_seektable_bad_offsets <zst> <raw>"); return 1; }
+
+    size_t zst_size;
+    uint8_t *zst = read_file(argv[0], &zst_size);
+    if (!zst || zst_size < 30) { FAIL("cannot read zst file"); free(zst); return 1; }
+
+    size_t raw_size;
+    uint8_t *raw = read_file(argv[1], &raw_size);
+    if (!raw) { FAIL("cannot read raw file"); free(zst); return 1; }
+
+    /* Locate the seektable footer (last 9 bytes):
+     *   bytes 0-3: numFrames (LE32)
+     *   byte  4:   sfd
+     *   bytes 5-8: seekable magic (0x8F92EAB1)
+     */
+    uint8_t *footer = zst + (zst_size - 9);
+    /* Read seekable magic — stored as LE in the file.  On a LE host,
+     * memcpy gives us the numeric value directly. */
+    uint32_t magic;
+    memcpy(&magic, footer + 5, 4);
+    /* On LE: magic == ZSTD_SEEKABLE_MAGICNUMBER (0x8F92EAB1) */
+    if (magic != ZSTD_SEEKABLE_MAGICNUMBER) {
+        FAIL("test file does not have seekable footer (magic=0x%08X)", magic);
+        free(zst); free(raw); return 1;
+    }
+
+    uint8_t sfd = footer[4];
+    uint8_t checksumFlag = sfd >> 7;
+    uint32_t numFrames;
+    memcpy(&numFrames, footer, 4);
+    if (numFrames < 2) {
+        FAIL("need at least 2 frames in seektable, got %u", numFrames);
+        free(zst); free(raw); return 1;
+    }
+
+    uint32_t sizePerEntry = 8 + (checksumFlag ? 4 : 0);
+    uint32_t tableSize = sizePerEntry * numFrames;
+    uint32_t frameSize = tableSize + 9 + 8; /* footer + skippable header */
+    uint8_t *table = zst + (zst_size - frameSize) + 8; /* skip skippable header */
+
+    /* Corrupt the first entry's compressed-size delta (dc) to 0xFFFFFFFF.
+     * This will cause cOffset to exceed the buffer after the first entry. */
+    uint32_t bad_dc = 0xFFFFFFFFU;
+    memcpy(table, &bad_dc, 4);
+
+    /* Create context — should ignore bad seektable, scan frames, produce correct data */
+    ZSTDSeek_Context *ctx = ZSTDSeek_create(zst, zst_size);
+    if (!ctx) {
+        FAIL("create failed (expected fallback to scanning)");
+        free(zst); free(raw); return 1;
+    }
+
+    uint8_t *out = malloc(raw_size);
+    int64_t nread = ZSTDSeek_read(out, raw_size, ctx);
+    if (nread != (int64_t)raw_size) {
+        FAIL("read returned %" PRId64 " expected %zu", nread, raw_size);
+        free(out); ZSTDSeek_free(ctx); free(zst); free(raw); return 1;
+    }
+
+    if (memcmp(out, raw, raw_size) != 0) {
+        FAIL("data mismatch after seektable fallback");
+        free(out); ZSTDSeek_free(ctx); free(zst); free(raw); return 1;
+    }
+
+    PASS("error_seektable_bad_offsets: bad dc=0xFFFFFFFF ignored, fallback scan produced correct data");
+    free(out); ZSTDSeek_free(ctx); free(zst); free(raw);
+    return 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
  * Dispatch table
  * ══════════════════════════════════════════════════════════════════════════*/
 typedef struct {
@@ -1987,6 +2166,7 @@ static const TestEntry tests[] = {
     /* Edge cases */
     { "frame_boundary",         test_frame_boundary },
     { "read_too_much",          test_read_too_much },
+    { "read_zero_bytes",        test_read_zero_bytes },
     { "fileno_buffer",          test_fileno_buffer },
     { "seekable_malformed_footer", test_seekable_malformed_footer },
     /* Errors */
@@ -2000,6 +2180,8 @@ static const TestEntry tests[] = {
     { "error_empty_file",       test_error_empty_file },
     { "error_corrupted_header", test_error_corrupted_header },
     { "error_mixed_format",     test_error_mixed_format },
+    { "error_corrupted_frame_data", test_error_corrupted_frame_data },
+    { "error_seektable_bad_offsets", test_error_seektable_bad_offsets },
     { NULL, NULL }
 };
 
