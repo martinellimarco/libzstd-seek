@@ -223,8 +223,8 @@ int32_t ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const siz
                             DEBUG("Last frame Header = %u does not match magic number %u. Ignoring malformed seektable.\n", skippableHeader, (ZSTD_MAGIC_SKIPPABLE_START|0xE));
                         }else{
                             const uint32_t _frameSize = load_le32(frame + 4);
-                            if(_frameSize + ZSTD_SKIPPABLE_HEADER_SIZE != frameSize){
-                                DEBUG("Last frame size = %u does not match expected size = %zu. Ignoring malformed seektable.\n", _frameSize + ZSTD_SKIPPABLE_HEADER_SIZE, frameSize);
+                            if((size_t)_frameSize + ZSTD_SKIPPABLE_HEADER_SIZE != frameSize){
+                                DEBUG("Last frame size = %zu does not match expected size = %zu. Ignoring malformed seektable.\n", (size_t)_frameSize + ZSTD_SKIPPABLE_HEADER_SIZE, frameSize);
                             }else{
                                 uint8_t *table = frame + ZSTD_SKIPPABLE_HEADER_SIZE;
                                 size_t cOffset = 0;
