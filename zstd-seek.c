@@ -341,6 +341,10 @@ int32_t ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const siz
                     DEBUG("Error decompressing: %s\n", ZSTD_getErrorName(lastRet));
                     goto cleanup;
                 }
+                if(frameContentSize > SIZE_MAX - output.pos){
+                    DEBUG("Frame content size overflow during probing\n");
+                    goto cleanup;
+                }
                 frameContentSize += output.pos;
             }
 
