@@ -201,6 +201,11 @@ int32_t ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const siz
                 const uint32_t numFrames = load_le32(footer);
                 const uint32_t sizePerEntry = 8 + (checksumFlag ? 4 : 0);
 
+                /* Guard: buffer must be large enough for at least the footer + header. */
+                if(size < ZSTD_SEEK_TABLE_FOOTER_SIZE + ZSTD_SKIPPABLE_HEADER_SIZE){
+                    DEBUG("Buffer too small for seektable frame. Ignoring malformed seektable.\n");
+                }else{
+
                 /* Guard: numFrames must fit within the buffer space available for entries. */
                 const size_t maxEntries = (size - ZSTD_SEEK_TABLE_FOOTER_SIZE - ZSTD_SKIPPABLE_HEADER_SIZE) / sizePerEntry;
                 if(numFrames > maxEntries){
@@ -261,6 +266,7 @@ int32_t ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const siz
                         }
                     }
                 }
+                } /* size >= FOOTER + HEADER */
             }
         }
     } /* size >= ZSTD_SEEK_TABLE_FOOTER_SIZE */
