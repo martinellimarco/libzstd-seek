@@ -392,6 +392,9 @@ cleanup:
 }
 
 bool ZSTDSeek_jumpTableIsInitialized(const ZSTDSeek_Context *sctx){
+    if(!sctx){
+        return false;
+    }
     return sctx->jumpTableFullyInitialized;
 }
 
@@ -813,6 +816,9 @@ size_t ZSTDSeek_lastKnownUncompressedFileSize(ZSTDSeek_Context *sctx){
 }
 
 int32_t ZSTDSeek_fileno(const ZSTDSeek_Context *sctx){
+    if(!sctx){
+        return -1;
+    }
     return sctx->mmap_fd;
 }
 
