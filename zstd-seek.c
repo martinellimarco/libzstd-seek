@@ -196,7 +196,7 @@ int32_t ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const siz
 
             /* check reserved bits */
             if((sfd >> 2) & 0x1f){
-                DEBUG("Last frame checksumFlag= %x: Bits 3-7 should be zero. Ignoring malformed seektable.\n",(uint32_t)sfd);
+                DEBUG("Seektable descriptor 0x%02x: reserved bits (2-6) are non-zero. Ignoring malformed seektable.\n",(uint32_t)sfd);
             }else{
                 const uint32_t numFrames = load_le32(footer);
                 const uint32_t sizePerEntry = 8 + (checksumFlag ? 4 : 0);
