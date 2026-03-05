@@ -595,6 +595,7 @@ int64_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context 
             const uint32_t magic = load_le32(sctx->inBuff);
             if((magic & ZSTD_MAGIC_SKIPPABLE_MASK) == ZSTD_MAGIC_SKIPPABLE_START){
                 sctx->inBuff += sctx->lastFrameCompressedSize;
+                sctx->input = (ZSTD_inBuffer){sctx->inBuff, 0, 0};
                 continue;
             }
 
