@@ -140,13 +140,24 @@ int32_t ZSTDSeek_initializeJumpTable(ZSTDSeek_Context *sctx){
     return ZSTDSeek_initializeJumpTableUpUntilPos(sctx, SIZE_MAX);
 }
 
-bool ZSTDSeek_isLittleEndian(){
-    volatile int x = 1;
-    return *(char*)(&x) == 1;
-}
+/* Compile-time endianness detection.  GCC/Clang define __BYTE_ORDER__
+ * and __ORDER_LITTLE_ENDIAN__; MSVC is always little-endian on supported
+ * architectures.  If none of the macros are available the runtime
+ * fallback is used (no volatile — the result is constant). */
+#if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__)
+  #define ZSTDSEEK_LITTLE_ENDIAN (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
+#elif defined(_WIN32)
+  #define ZSTDSEEK_LITTLE_ENDIAN 1
+#else
+  static bool ZSTDSeek_isLittleEndian(void){
+      const int x = 1;
+      return *(const char*)(&x) == 1;
+  }
+  #define ZSTDSEEK_LITTLE_ENDIAN ZSTDSeek_isLittleEndian()
+#endif
 
-uint32_t ZSTDSeek_fromLE32(const uint32_t data){
-    if(ZSTDSeek_isLittleEndian()){
+static uint32_t ZSTDSeek_fromLE32(const uint32_t data){
+    if(ZSTDSEEK_LITTLE_ENDIAN){
         return data;
     }else{
         return ((data & 0xFF000000) >> 24) |
