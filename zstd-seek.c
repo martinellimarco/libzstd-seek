@@ -20,10 +20,24 @@
 #include "zstd-seek.h"
 
 #ifdef _WIN32
-#include "windows-mmap.h"
+#include "mman_compat.h"
+/* fstat / struct stat use 32-bit off_t (long) on MSVC / MinGW-w64.
+   Use GetFileSizeEx which always returns a 64-bit size. */
+static int64_t ZSTDSeek_getFileSize(int32_t fd){
+    HANDLE h = (HANDLE)_get_osfhandle(fd);
+    if(h == INVALID_HANDLE_VALUE) return -1;
+    LARGE_INTEGER li;
+    if(!GetFileSizeEx(h, &li)) return -1;
+    return (int64_t)li.QuadPart;
+}
 #else
 #include <unistd.h>
 #include <sys/mman.h>
+static int64_t ZSTDSeek_getFileSize(int32_t fd){
+    struct stat st;
+    if(fstat(fd, &st) != 0) return -1;
+    return (int64_t)st.st_size;
+}
 #endif
 
 typedef struct {
@@ -446,27 +460,27 @@ ZSTDSeek_Context* ZSTDSeek_createFromFileWithoutJumpTable(const char* file){
         return NULL;
     }
 
-    struct stat st;
-    if(fstat(fd, &st) != 0 || st.st_size <= 0 || (uint64_t)st.st_size > SIZE_MAX){
+    const int64_t fileSize = ZSTDSeek_getFileSize(fd);
+    if(fileSize <= 0 || (uint64_t)fileSize > SIZE_MAX){
         DEBUG("Unable to stat or empty file '%s'\n", file);
         close(fd);
         return NULL;
     }
 
-    void* const buff = mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    void* const buff = mmap(NULL, (size_t)fileSize, PROT_READ, MAP_PRIVATE, fd, 0);
     if(buff == MAP_FAILED){
         DEBUG("Unable to mmap '%s'\n",  file);
         close(fd);
         return NULL;
     }
 
-    ZSTDSeek_Context *sctx = ZSTDSeek_createWithoutJumpTable(buff, (size_t)st.st_size);
+    ZSTDSeek_Context *sctx = ZSTDSeek_createWithoutJumpTable(buff, (size_t)fileSize);
     if(sctx){
         sctx->mmap_fd = fd;
         sctx->close_fd = 1;
         return sctx;
     }else{
-        munmap(buff, (size_t)st.st_size);
+        munmap(buff, (size_t)fileSize);
         close(fd);
         return NULL;
     }
@@ -483,12 +497,12 @@ ZSTDSeek_Context* ZSTDSeek_createFromFile(const char* file){
 }
 
 ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptorWithoutJumpTable(const int32_t fd){
-    struct stat st;
-    if(fstat(fd, &st) != 0 || st.st_size <= 0 || (uint64_t)st.st_size > SIZE_MAX){
+    const int64_t fileSize = ZSTDSeek_getFileSize(fd);
+    if(fileSize <= 0 || (uint64_t)fileSize > SIZE_MAX){
         DEBUG("Unable to stat or empty file descriptor %d\n", fd);
         return NULL;
     }
-    const size_t size = (size_t)st.st_size;
+    const size_t size = (size_t)fileSize;
 
     void* const buff = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
     if(buff == MAP_FAILED){
@@ -699,8 +713,7 @@ int64_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context 
 
     /* Compute currentCompressedPos from absolute pointers so it stays
      * consistent regardless of which code path was taken above. */
-    sctx->currentCompressedPos =
-        (size_t)((uint8_t *)sctx->inBuff - (uint8_t *)sctx->buff) + sctx->input.pos;
+    sctx->currentCompressedPos = (size_t)((uint8_t *)sctx->inBuff - (uint8_t *)sctx->buff) + sctx->input.pos;
 
     return shouldRead - toRead;
 }

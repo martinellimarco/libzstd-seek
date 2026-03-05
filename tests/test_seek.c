@@ -21,7 +21,7 @@
 #include <time.h>
 
 #ifdef _WIN32
-#include "../windows-mmap.h"
+#include "../mman_compat.h"
 #else
 #include <sys/mman.h>
 #include <unistd.h>

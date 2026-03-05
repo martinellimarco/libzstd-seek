@@ -4,7 +4,7 @@ project(libzstd-seek VERSION 1.0.0 LANGUAGES C)
 set(CMAKE_C_STANDARD 99)
 
 # --- Optional: sanitizers and coverage (mutually exclusive) ---
-option(SANITIZE "Enable AddressSanitizer + UndefinedBehaviorSanitizer" OFF)
+option(SANITIZE "Enable AddressSanitizer + UndefinedBehaviorSanitizer"  OFF)
 option(COVERAGE "Enable LLVM coverage instrumentation"                  OFF)
 option(FUZZ     "Build libFuzzer harnesses (requires Clang)"            OFF)
 
@@ -57,7 +57,7 @@ if(NOT ZSTD_LIB OR NOT ZSTD_INC)
 endif()
 
 # --- Library ---
-add_library(zstd-seek zstd-seek.c zstd-seek.h)
+add_library(zstd-seek zstd-seek.c zstd-seek.h mman_compat.h)
 target_include_directories(zstd-seek PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${ZSTD_INC})
 target_link_libraries(zstd-seek ${ZSTD_LIB} m)
 
