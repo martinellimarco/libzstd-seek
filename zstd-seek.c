@@ -220,7 +220,7 @@ int32_t ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const siz
                         uint8_t *frame = (uint8_t *)buff + (size - frameSize);
                         const uint32_t skippableHeader = load_le32(frame);
                         if(skippableHeader != (ZSTD_MAGIC_SKIPPABLE_START|0xE)){
-                            DEBUG("Last frame Header = %u does not match magic number %u. Ignoring malformed seektable.\n", skippableHeader, (ZSTD_MAGIC_SKIPPABLE_START|0xE));
+                            DEBUG("Last frame Header = %u does not match magic number %u. Ignoring malformed seektable.\n", skippableHeader, (unsigned)(ZSTD_MAGIC_SKIPPABLE_START|0xE));
                         }else{
                             const uint32_t _frameSize = load_le32(frame + 4);
                             if((size_t)_frameSize + ZSTD_SKIPPABLE_HEADER_SIZE != frameSize){
@@ -235,8 +235,8 @@ int32_t ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const siz
                                         seektable_ok = 0;
                                         break;
                                     }
-                                    const uint32_t dc = load_le32(table + (i * sizePerEntry));
-                                    const uint32_t dd = load_le32(table + (i * sizePerEntry) + 4);
+                                    const uint32_t dc = load_le32(table + (size_t)i * sizePerEntry);
+                                    const uint32_t dd = load_le32(table + (size_t)i * sizePerEntry + 4);
                                     if(cOffset > SIZE_MAX - dc || dOffset > SIZE_MAX - dd){
                                         DEBUG("Seektable offset overflow at entry %u. Ignoring malformed seektable.\n", i);
                                         seektable_ok = 0;
