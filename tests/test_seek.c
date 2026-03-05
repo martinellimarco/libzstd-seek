@@ -1103,7 +1103,7 @@ static int test_error_null(int argc, char *argv[]) {
     if (ZSTDSeek_initializeJumpTable(NULL) != -1) { FAIL("initializeJumpTable(NULL)"); failures++; }
     if (ZSTDSeek_uncompressedFileSize(NULL) != 0) { FAIL("uncompressedFileSize(NULL)"); failures++; }
     if (ZSTDSeek_lastKnownUncompressedFileSize(NULL) != 0) { FAIL("lastKnownSize(NULL)"); failures++; }
-    if (ZSTDSeek_read(NULL, 0, NULL) != 0) { FAIL("read(NULL)"); failures++; }
+    if (ZSTDSeek_read(NULL, 0, NULL) != ZSTDSEEK_ERR_READ) { FAIL("read(NULL)"); failures++; }
     if (ZSTDSeek_seek(NULL, 0, 0) != -1) { FAIL("seek(NULL)"); failures++; }
     if (ZSTDSeek_tell(NULL) != -1) { FAIL("tell(NULL)"); failures++; }
     if (ZSTDSeek_compressedTell(NULL) != -1) { FAIL("compressedTell(NULL)"); failures++; }

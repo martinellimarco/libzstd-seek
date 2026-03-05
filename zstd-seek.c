@@ -586,7 +586,7 @@ ZSTDSeek_Context* ZSTDSeek_create(void *buff, const size_t size){
 int64_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context *sctx){
     if(!sctx){
         DEBUG("ZSTDSeek_Context is NULL\n");
-        return 0;
+        return ZSTDSEEK_ERR_READ;
     }
     
     ZSTDSeek_getJumpCoordinate(sctx, sctx->currentUncompressedPos); //trigger the generation of a jump table record, if needed
