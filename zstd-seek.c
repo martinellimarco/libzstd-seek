@@ -356,6 +356,11 @@ int32_t ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const siz
             frameContentSize = (size_t)fcs;
         }
 
+        if(compressedPos > SIZE_MAX - frameCompressedSize ||
+           uncompressedPos > SIZE_MAX - frameContentSize){
+            DEBUG("Position overflow during frame scan\n");
+            goto cleanup;
+        }
         compressedPos += frameCompressedSize;
         uncompressedPos += frameContentSize;
         buff = (uint8_t *)buff + frameCompressedSize;
