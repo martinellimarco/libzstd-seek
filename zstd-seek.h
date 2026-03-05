@@ -170,7 +170,7 @@ int32_t ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, size_t up
  * Check whether the jump table has been fully initialized.
  *
  * @param sctx  Context to query.
- * @return 1 if fully initialized, 0 otherwise.
+ * @return true if fully initialized, false otherwise.
  */
 bool ZSTDSeek_jumpTableIsInitialized(const ZSTDSeek_Context *sctx);
 
@@ -285,8 +285,11 @@ ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptor(int32_t fd);
  * @param outBuff     Destination buffer (must be at least @p outBuffSize bytes).
  * @param outBuffSize Maximum number of bytes to read.
  * @param sctx        Context to read from.
- * @return Number of bytes actually read (0 at EOF), or a negative error
- *         code (@ref ZSTDSEEK_ERR_READ) on decompression failure.
+ * @return Number of bytes actually read (0 at EOF), or
+ *         @ref ZSTDSEEK_ERR_READ on decompression failure or unreadable data.
+ *         This is the only negative error code returned by this function;
+ *         @ref ZSTDSEEK_ERR_NEGATIVE_SEEK and @ref ZSTDSEEK_ERR_BEYOND_END_SEEK
+ *         are exclusive to ZSTDSeek_seek().
  */
 int64_t ZSTDSeek_read(void *outBuff, size_t outBuffSize, ZSTDSeek_Context *sctx);
 
@@ -394,7 +397,7 @@ size_t ZSTDSeek_getNumberOfFrames(ZSTDSeek_Context *sctx);
  * short-circuits after finding two frames.
  *
  * @param sctx  Context to query.
- * @return 1 if the stream has two or more frames, 0 otherwise.
+ * @return @c true if the stream has two or more frames, @c false otherwise.
  */
 bool ZSTDSeek_isMultiframe(ZSTDSeek_Context *sctx);
 
