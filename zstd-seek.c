@@ -418,26 +418,26 @@ ZSTDSeek_Context* ZSTDSeek_createFromFileWithoutJumpTable(const char* file){
     }
 
     struct stat st;
-    if(fstat(fd, &st) != 0 || st.st_size <= 0){
+    if(fstat(fd, &st) != 0 || st.st_size <= 0 || (uint64_t)st.st_size > SIZE_MAX){
         DEBUG("Unable to stat or empty file '%s'\n", file);
         close(fd);
         return NULL;
     }
 
-    void* const buff = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    void* const buff = mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
     if(buff == MAP_FAILED){
         DEBUG("Unable to mmap '%s'\n",  file);
         close(fd);
         return NULL;
     }
 
-    ZSTDSeek_Context *sctx = ZSTDSeek_createWithoutJumpTable(buff, st.st_size);
+    ZSTDSeek_Context *sctx = ZSTDSeek_createWithoutJumpTable(buff, (size_t)st.st_size);
     if(sctx){
         sctx->mmap_fd = fd;
         sctx->close_fd = 1;
         return sctx;
     }else{
-        munmap(buff, st.st_size);
+        munmap(buff, (size_t)st.st_size);
         close(fd);
         return NULL;
     }
@@ -455,7 +455,7 @@ ZSTDSeek_Context* ZSTDSeek_createFromFile(const char* file){
 
 ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptorWithoutJumpTable(const int32_t fd){
     struct stat st;
-    if(fstat(fd, &st) != 0 || st.st_size <= 0){
+    if(fstat(fd, &st) != 0 || st.st_size <= 0 || (uint64_t)st.st_size > SIZE_MAX){
         DEBUG("Unable to stat or empty file descriptor %d\n", fd);
         return NULL;
     }
