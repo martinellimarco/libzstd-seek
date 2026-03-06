@@ -14,6 +14,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 #include "../zstd-seek.h"
@@ -71,6 +72,14 @@ int main(int argc, const char** argv) {
         }
         fwrite(buff, (size_t)len, 1, outF);
     }
+
+    if(len < 0){
+        fprintf(stderr, "\nError while decompressing (code: %" PRId64 ")\n", len);
+        fclose(outF);
+        ZSTDSeek_free(sctx);
+        return 1;
+    }
+
     printf("\rWrote %.2f MiB\n", total / 1024.f / 1024.f);
 
     fclose(outF);
