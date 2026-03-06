@@ -19,8 +19,25 @@
 #include <string.h>
 #include "zstd-seek.h"
 
+/* ── Platform compatibility wrappers ──────────────────────────────────────
+ * MSVC does not provide POSIX open()/close(); it has _open()/_close() in
+ * <io.h>.  MinGW-w64 provides both, so these wrappers are only strictly
+ * needed for native MSVC builds, but they are harmless everywhere.
+ *
+ * On Windows _open() defaults to text-mode translation (\r\n ↔ \n) which
+ * corrupts binary data, so _O_BINARY is always added.
+ * ──────────────────────────────────────────────────────────────────────── */
 #ifdef _WIN32
 #include "mman_compat.h"
+#include <io.h>             /* _open, _close, _get_osfhandle */
+
+static inline int32_t ZSTDSeek_open(const char *path, int flags){
+    return _open(path, flags | _O_BINARY);
+}
+static inline int ZSTDSeek_close(int32_t fd){
+    return _close(fd);
+}
+
 /* fstat / struct stat use 32-bit off_t (long) on MSVC / MinGW-w64.
    Use GetFileSizeEx which always returns a 64-bit size. */
 static int64_t ZSTDSeek_getFileSize(int32_t fd){
@@ -33,6 +50,14 @@ static int64_t ZSTDSeek_getFileSize(int32_t fd){
 #else
 #include <unistd.h>
 #include <sys/mman.h>
+
+static inline int32_t ZSTDSeek_open(const char *path, int flags){
+    return open(path, flags);
+}
+static inline int ZSTDSeek_close(int32_t fd){
+    return close(fd);
+}
+
 static int64_t ZSTDSeek_getFileSize(int32_t fd){
     struct stat st;
     if(fstat(fd, &st) != 0) return -1;
@@ -454,7 +479,7 @@ ZSTDSeek_JumpCoordinate ZSTDSeek_getJumpCoordinate(ZSTDSeek_Context *sctx, const
 /* Seek API */
 
 ZSTDSeek_Context* ZSTDSeek_createFromFileWithoutJumpTable(const char* file){
-    const int32_t fd = open(file, O_RDONLY, 0);
+    const int32_t fd = ZSTDSeek_open(file, O_RDONLY);
     if(fd < 0){
         DEBUG("Unable to open '%s'\n", file);
         return NULL;
@@ -463,14 +488,14 @@ ZSTDSeek_Context* ZSTDSeek_createFromFileWithoutJumpTable(const char* file){
     const int64_t fileSize = ZSTDSeek_getFileSize(fd);
     if(fileSize <= 0 || (uint64_t)fileSize > SIZE_MAX){
         DEBUG("Unable to stat or empty file '%s'\n", file);
-        close(fd);
+        ZSTDSeek_close(fd);
         return NULL;
     }
 
     void* const buff = mmap(NULL, (size_t)fileSize, PROT_READ, MAP_PRIVATE, fd, 0);
     if(buff == MAP_FAILED){
         DEBUG("Unable to mmap '%s'\n",  file);
-        close(fd);
+        ZSTDSeek_close(fd);
         return NULL;
     }
 
@@ -481,7 +506,7 @@ ZSTDSeek_Context* ZSTDSeek_createFromFileWithoutJumpTable(const char* file){
         return sctx;
     }else{
         munmap(buff, (size_t)fileSize);
-        close(fd);
+        ZSTDSeek_close(fd);
         return NULL;
     }
 }
@@ -888,7 +913,7 @@ void ZSTDSeek_free(ZSTDSeek_Context *sctx){
     if(sctx->mmap_fd >= 0){
         munmap(sctx->buff, sctx->size);
         if(sctx->close_fd){
-            close(sctx->mmap_fd);
+            ZSTDSeek_close(sctx->mmap_fd);
         }
     }
 

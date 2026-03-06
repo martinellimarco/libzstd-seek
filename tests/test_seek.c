@@ -20,12 +20,18 @@
 #include <sys/stat.h>
 #include <time.h>
 
+/* ── Platform compatibility wrappers (MSVC has _open/_close in <io.h>) ── */
 #ifdef _WIN32
 #include "../mman_compat.h"
+#include <io.h>               /* _open, _close */
 #include <process.h>          /* _getpid() */
+#define ts_open(path, flags)  _open((path), (flags) | _O_BINARY)
+#define ts_close(fd)          _close(fd)
 #else
 #include <sys/mman.h>
 #include <unistd.h>
+#define ts_open(path, flags)  open((path), (flags))
+#define ts_close(fd)          close(fd)
 #endif
 
 #include "zstd-seek.h"
@@ -507,11 +513,11 @@ static int test_create_from_fd(int argc, char *argv[]) {
     uint8_t *raw = read_file(argv[1], &raw_size);
     if (!raw) { FAIL("cannot read raw file"); return 1; }
 
-    int fd = open(argv[0], O_RDONLY);
+    int fd = ts_open(argv[0], O_RDONLY);
     if (fd < 0) { FAIL("cannot open '%s'", argv[0]); free(raw); return 1; }
 
     ZSTDSeek_Context *ctx = ZSTDSeek_createFromFileDescriptor(fd);
-    if (!ctx) { FAIL("createFromFileDescriptor failed"); close(fd); free(raw); return 1; }
+    if (!ctx) { FAIL("createFromFileDescriptor failed"); ts_close(fd); free(raw); return 1; }
 
     int returned_fd = ZSTDSeek_fileno(ctx);
     if (returned_fd != fd) {
@@ -541,11 +547,11 @@ static int test_create_from_fd_no_jt(int argc, char *argv[]) {
     uint8_t *raw = read_file(argv[1], &raw_size);
     if (!raw) { FAIL("cannot read raw file"); return 1; }
 
-    int fd = open(argv[0], O_RDONLY);
+    int fd = ts_open(argv[0], O_RDONLY);
     if (fd < 0) { FAIL("cannot open '%s'", argv[0]); free(raw); return 1; }
 
     ZSTDSeek_Context *ctx = ZSTDSeek_createFromFileDescriptorWithoutJumpTable(fd);
-    if (!ctx) { FAIL("createFromFDWithoutJT failed"); close(fd); free(raw); return 1; }
+    if (!ctx) { FAIL("createFromFDWithoutJT failed"); ts_close(fd); free(raw); return 1; }
 
     ZSTDSeek_initializeJumpTable(ctx);
 
