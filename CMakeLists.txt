@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(libzstd-seek VERSION 1.0.0 LANGUAGES C)
+project(libzstd-seek VERSION 1.3.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 99)
 
