@@ -319,11 +319,11 @@ int32_t ZSTDSeek_initializeJumpTableUpUntilPos(ZSTDSeek_Context *sctx, const siz
         uncompressedPos = sctx->jt->records[sctx->jt->length-1].uncompressedPos;
     }
 
-    buff = (uint8_t *)sctx->buff + compressedPos;
     if (compressedPos > size) {
         DEBUG("Compressed position exceeds buffer size\n");
         return -1;
     }
+    buff = (uint8_t *)sctx->buff + compressedPos;
     size -= compressedPos; /* size now tracks remaining bytes from buff onwards */
 
     /* Probe DCtx and buffer for frames without content-size.
