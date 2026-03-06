@@ -100,7 +100,8 @@ ZSTDSeek_JumpTable* ZSTDSeek_getJumpTableOfContext(ZSTDSeek_Context *sctx);
  * is created automatically by ZSTDSeek_create() or
  * ZSTDSeek_initializeJumpTable().
  *
- * @return A newly allocated jump table.  The caller must free it with
+ * @return A newly allocated jump table on success, or @c NULL if memory
+ *         allocation fails.  The caller must free a non-NULL result with
  *         ZSTDSeek_freeJumpTable().
  */
 ZSTDSeek_JumpTable* ZSTDSeek_newJumpTable();
