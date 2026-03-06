@@ -61,7 +61,8 @@ add_library(zstd-seek zstd-seek.c zstd-seek.h mman_compat.h)
 target_include_directories(zstd-seek PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${ZSTD_INC})
 target_link_libraries(zstd-seek ${ZSTD_LIB} m)
 
-if(NOT FUZZ)
+option(BUILD_EXAMPLES "Build example programs" ON)
+if(BUILD_EXAMPLES AND NOT FUZZ)
     add_subdirectory(examples)
 endif()
 

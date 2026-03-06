@@ -29,7 +29,7 @@ jobs:
         run: ${{ matrix.install }}
 
       - name: Configure
-        run: cmake -B build -DBUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
+        run: cmake -B build -DBUILD_TESTS=ON -DBUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Debug
 
       - name: Build
         run: cmake --build build
@@ -57,11 +57,12 @@ jobs:
           install: >-
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
             mingw-w64-ucrt-x86_64-zstd
             coreutils
 
       - name: Configure
-        run: cmake -B build -G "MinGW Makefiles" -DBUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
+        run: cmake -B build -G Ninja -DBUILD_TESTS=ON -DBUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Debug
 
       - name: Build
         run: cmake --build build
@@ -82,7 +83,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y cmake libzstd-dev zstd
 
       - name: Configure
-        run: cmake -B build -DBUILD_TESTS=ON -DSANITIZE=ON
+        run: cmake -B build -DBUILD_TESTS=ON -DBUILD_EXAMPLES=OFF -DSANITIZE=ON
 
       - name: Build
         run: cmake --build build
