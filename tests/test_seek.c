@@ -22,6 +22,7 @@
 
 #ifdef _WIN32
 #include "../mman_compat.h"
+#include <process.h>          /* _getpid() */
 #else
 #include <sys/mman.h>
 #include <unistd.h>
@@ -2252,7 +2253,11 @@ static int test_seek_stress(int argc, char *argv[]) {
 
     uint64_t seed = strtoull(argv[2], NULL, 10);
     if (seed == 0) {
+#ifdef _WIN32
+        seed = (uint64_t)time(NULL) ^ ((uint64_t)_getpid() << 16);
+#else
         seed = (uint64_t)time(NULL) ^ ((uint64_t)getpid() << 16);
+#endif
         if (seed == 0) seed = 1;
     }
     size_t num_ops = (size_t)strtoull(argv[3], NULL, 10);
