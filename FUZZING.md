@@ -4,7 +4,7 @@
 
 The `fuzz/` directory contains [libFuzzer](https://llvm.org/docs/LibFuzzer.html)
 harnesses for fuzz-testing libzstd-seek. Fuzzing complements the deterministic
-test suite (71 tests — see [TESTING.md](TESTING.md)) by exploring the vast
+test suite (see [TESTING.md](TESTING.md)) by exploring the vast
 space of possible inputs that manual tests cannot cover.
 
 Three harnesses are provided:

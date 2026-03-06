@@ -29,7 +29,7 @@ If you want to get debug messages then `#define ZSTD_SEEK_DEBUG 1`
 
 ## Testing
 
-The test suite (~50 tests) is built into the project and covers correctness,
+The test suite (85 tests) is built into the project and covers correctness,
 seek accuracy, memory safety (ASAN + UBSAN), and code coverage (LLVM).
 
 ```bash
@@ -43,8 +43,8 @@ test categories, coverage results).
 
 ## Fuzzing
 
-Two [libFuzzer](https://llvm.org/docs/LibFuzzer.html) harnesses exercise the
-decompression and seekable format parsing code paths.
+Three [libFuzzer](https://llvm.org/docs/LibFuzzer.html) harnesses exercise the
+decompression, seekable format parsing, and jump table code paths.
 
 See [FUZZING.md](FUZZING.md) for setup and usage instructions.
 

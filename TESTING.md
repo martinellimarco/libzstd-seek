@@ -229,7 +229,7 @@ test output for reproducibility in case of failure.
 ## Coverage results
 
 Current numbers for `zstd-seek.c` measured on macOS Apple Silicon with all
-84 tests (Debug, LLVM coverage build):
+85 tests (Debug, LLVM coverage build):
 
 | Metric        | Value         |
 |---------------|---------------|
