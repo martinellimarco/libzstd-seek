@@ -60,8 +60,8 @@ int main(int argc, const char** argv) {
     printf("Decompressing to %s\n", outFileName);
     free((void*)outFileName);
 
-    uint8_t *buff[BUFFSIZE];
-    size_t len;
+    uint8_t buff[BUFFSIZE];
+    int64_t len;
     size_t total=0;
     int i=0;
     while((len = ZSTDSeek_read(buff, BUFFSIZE, sctx))>0){
@@ -69,7 +69,7 @@ int main(int argc, const char** argv) {
         if((i++)%10==0){
             printf("\rWrote %.2f MiB", total / 1024.f / 1024.f);
         }
-        fwrite(buff, len, 1, outF);
+        fwrite(buff, (size_t)len, 1, outF);
     }
     printf("\rWrote %.2f MiB\n", total / 1024.f / 1024.f);
 
