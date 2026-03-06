@@ -95,7 +95,8 @@ generate_mixed() {
     generate_text "$third"
     cp "$RAW_FILE" "$WORK_DIR/mix_part"
     # 1/3 binary
-    dd if=/dev/urandom bs=1048576 count=$((third / 1048576)) 2>/dev/null >> "$WORK_DIR/mix_part"
+    dd if=/dev/urandom bs=1048576 count=$((third / 1048576 + 1)) 2>/dev/null \
+        | head -c "$third" >> "$WORK_DIR/mix_part"
     # 1/3 repetitive pattern
     generate_repetitive "$rest" "$WORK_DIR/tmp_rep_chunk"
     cat "$WORK_DIR/tmp_rep_chunk" >> "$WORK_DIR/mix_part"
