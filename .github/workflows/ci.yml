@@ -60,6 +60,7 @@ jobs:
             mingw-w64-ucrt-x86_64-ninja
             mingw-w64-ucrt-x86_64-zstd
             coreutils
+            diffutils
 
       - name: Configure
         run: cmake -B build -G Ninja -DBUILD_TESTS=ON -DBUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Debug
