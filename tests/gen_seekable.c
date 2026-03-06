@@ -221,6 +221,14 @@ int main(int argc, char *argv[]) {
     uint8_t *comp_buf = malloc(comp_buf_size);
     if (!raw_buf || !comp_buf) {
         fprintf(stderr, "gen_seekable: malloc failed\n");
+        free(raw_buf);
+        free(comp_buf);
+        free(comp_sizes);
+        free(decomp_sizes);
+        free(checksums);
+        ZSTD_freeCCtx(cctx);
+        fclose(fout);
+        if (fraw) fclose(fraw);
         return 1;
     }
 
