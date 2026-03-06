@@ -6,7 +6,8 @@ set(CMAKE_C_STANDARD 99)
 # --- Optional: sanitizers and coverage (mutually exclusive) ---
 option(SANITIZE "Enable AddressSanitizer + UndefinedBehaviorSanitizer"  OFF)
 option(COVERAGE "Enable LLVM coverage instrumentation"                  OFF)
-option(FUZZ     "Build libFuzzer harnesses (requires Clang)"            OFF)
+option(FUZZ      "Build libFuzzer harnesses (requires Clang)"            OFF)
+option(DEBUG_LOG "Enable debug messages on stderr (ZSTD_SEEK_DEBUG)"    OFF)
 
 if(SANITIZE AND COVERAGE)
     message(FATAL_ERROR "SANITIZE and COVERAGE are mutually exclusive. Use separate build directories.")
@@ -61,7 +62,12 @@ add_library(zstd-seek zstd-seek.c zstd-seek.h mman_compat.h)
 target_include_directories(zstd-seek PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${ZSTD_INC})
 target_link_libraries(zstd-seek ${ZSTD_LIB} m)
 
-option(BUILD_EXAMPLES "Build example programs" ON)
+if(DEBUG_LOG)
+    target_compile_definitions(zstd-seek PRIVATE ZSTD_SEEK_DEBUG=1)
+    message(STATUS "libzstd-seek: debug logging enabled (ZSTD_SEEK_DEBUG=1)")
+endif()
+
+option(BUILD_EXAMPLES "Build example programs" OFF)
 if(BUILD_EXAMPLES AND NOT FUZZ)
     add_subdirectory(examples)
 endif()

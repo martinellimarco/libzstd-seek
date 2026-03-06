@@ -39,7 +39,7 @@ static inline int ZSTDSeek_close(int32_t fd){
 }
 
 /* fstat / struct stat use 32-bit off_t (long) on MSVC / MinGW-w64.
-   Use GetFileSizeEx which always returns a 64-bit size. */
+ *  Use GetFileSizeEx which always returns a 64-bit size. */
 static int64_t ZSTDSeek_getFileSize(int32_t fd){
     HANDLE h = (HANDLE)_get_osfhandle(fd);
     if(h == INVALID_HANDLE_VALUE) return -1;
