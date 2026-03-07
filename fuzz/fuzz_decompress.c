@@ -60,26 +60,26 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
             size_t read_size = (size_t)1 << read_shift; /* 1, 2, 4, ..., 128 */
             if (read_size > sizeof(buf)) read_size = sizeof(buf);
 
-            int rc;
+            int32_t rc;
             switch (mode) {
             case 0: { /* SEEK_SET */
-                long pos = (long)(raw_pos % (file_size + 1));
+                int64_t pos = (int64_t)(raw_pos % (file_size + 1));
                 rc = ZSTDSeek_seek(ctx, pos, SEEK_SET);
                 break;
             }
             case 1: { /* SEEK_CUR */
-                long cur = ZSTDSeek_tell(ctx);
-                long target = (long)(raw_pos % (file_size + 1));
+                int64_t cur = ZSTDSeek_tell(ctx);
+                int64_t target = (int64_t)(raw_pos % (file_size + 1));
                 rc = ZSTDSeek_seek(ctx, target - cur, SEEK_CUR);
                 break;
             }
             case 2: { /* SEEK_END */
-                long neg_off = -((long)(raw_pos % (file_size + 1)));
+                int64_t neg_off = -((int64_t)(raw_pos % (file_size + 1)));
                 rc = ZSTDSeek_seek(ctx, neg_off, SEEK_END);
                 break;
             }
             default: /* also SEEK_SET for mode==3 */
-                rc = ZSTDSeek_seek(ctx, (long)(raw_pos % (file_size + 1)), SEEK_SET);
+                rc = ZSTDSeek_seek(ctx, (int64_t)(raw_pos % (file_size + 1)), SEEK_SET);
                 break;
             }
 
