@@ -643,6 +643,10 @@ int64_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context 
     if(outBuffSize == 0){
         return 0;
     }
+    if(!outBuff){
+        DEBUG("outBuff is NULL with non-zero size\n");
+        return ZSTDSEEK_ERR_READ;
+    }
 
     ZSTDSeek_getJumpCoordinate(sctx, sctx->currentUncompressedPos); //trigger the generation of a jump table record, if needed
 
