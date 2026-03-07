@@ -195,7 +195,8 @@ This ensures the bug never regresses.
 ### Harness design
 
 libzstd-seek is a library with a clean API that returns error codes (NULL on
-creation failure, -1 or error constants on seek failure, 0 on read failure).
+creation failure, -1 or error constants on seek failure, ZSTDSEEK_ERR_READ on
+decompression failure, 0 on EOF).
 It never calls `exit()` or `abort()` — all error paths are exercised simply by
 calling the API and checking return values.
 
