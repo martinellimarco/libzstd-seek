@@ -283,6 +283,13 @@ ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptor(int32_t fd);
  * accordingly.  A short read (fewer bytes than requested) occurs at
  * frame boundaries or at the end of the uncompressed stream.
  *
+ * @note If a corrupted or unreadable frame is encountered after some
+ *       bytes have already been copied into @p outBuff, the function
+ *       returns a short read (the number of bytes successfully copied)
+ *       rather than an immediate error — consistent with @c fread
+ *       semantics.  The error (@ref ZSTDSEEK_ERR_READ) will be
+ *       reported on the *next* call, when no data can be delivered.
+ *
  * @param outBuff     Destination buffer (must be at least @p outBuffSize bytes).
  * @param outBuffSize Maximum number of bytes to read.
  * @param sctx        Context to read from.
