@@ -780,10 +780,42 @@ int32_t ZSTDSeek_seek(ZSTDSeek_Context *sctx, int64_t offset, int32_t origin){
         if(offset==0){
             return 0;
         }
-        offset = (int64_t)sctx->currentUncompressedPos + offset;
+        const size_t pos = sctx->currentUncompressedPos;
+        if(pos > (size_t)INT64_MAX){
+            DEBUG("SEEK_CUR overflow: position exceeds INT64_MAX\n");
+            return ZSTDSEEK_ERR_BEYOND_END_SEEK;
+        }
+        if(offset > 0){
+            if(offset > INT64_MAX - (int64_t)pos){
+                DEBUG("SEEK_CUR overflow: result would exceed INT64_MAX\n");
+                return ZSTDSEEK_ERR_BEYOND_END_SEEK;
+            }
+        }else{
+            if(pos < (size_t)(-offset)){
+                DEBUG("SEEK_CUR underflow: result would be negative\n");
+                return ZSTDSEEK_ERR_NEGATIVE_SEEK;
+            }
+        }
+        offset = (int64_t)pos + offset;
         origin = SEEK_SET;
     }else if(origin == SEEK_END){
-        offset = (int64_t)ZSTDSeek_uncompressedFileSize(sctx) + offset;
+        const size_t fileSize = ZSTDSeek_uncompressedFileSize(sctx);
+        if(fileSize > (size_t)INT64_MAX){
+            DEBUG("SEEK_END overflow: file size exceeds INT64_MAX\n");
+            return ZSTDSEEK_ERR_BEYOND_END_SEEK;
+        }
+        if(offset > 0){
+            if(offset > INT64_MAX - (int64_t)fileSize){
+                DEBUG("SEEK_END overflow: result would exceed INT64_MAX\n");
+                return ZSTDSEEK_ERR_BEYOND_END_SEEK;
+            }
+        }else if(offset < 0){
+            if(fileSize < (size_t)(-offset)){
+                DEBUG("SEEK_END underflow: result would be negative\n");
+                return ZSTDSEEK_ERR_NEGATIVE_SEEK;
+            }
+        }
+        offset = (int64_t)fileSize + offset;
         origin = SEEK_SET;
     }
     if(origin == SEEK_SET){
