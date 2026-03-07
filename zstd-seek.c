@@ -561,6 +561,11 @@ ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptor(const int32_t fd){
 }
 
 ZSTDSeek_Context* ZSTDSeek_createWithoutJumpTable(void *buff, const size_t size){
+    if(!buff && size > 0){
+        DEBUG("Buffer is NULL with non-zero size\n");
+        return NULL;
+    }
+
     ZSTD_DCtx *dctx = ZSTD_createDCtx();
     if(!dctx){
         return NULL;
