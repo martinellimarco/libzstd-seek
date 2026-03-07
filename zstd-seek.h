@@ -126,7 +126,11 @@ void ZSTDSeek_freeJumpTable(ZSTDSeek_JumpTable* jt);
  * Do not mix manual record insertion with ZSTDSeek_initializeJumpTable()
  * or ZSTDSeek_initializeJumpTableUpUntilPos().
  *
- * @param jt              Jump table to modify.
+ * @note This function silently ignores errors (@c NULL @p jt or internal
+ *       allocation failure).  Callers who need strict error checking
+ *       should verify jump table state separately.
+ *
+ * @param jt              Jump table to modify (may be @c NULL — no-op).
  * @param compressedPos   Byte offset of the frame in the compressed stream.
  * @param uncompressedPos Byte offset of the frame in the uncompressed stream.
  */
@@ -185,8 +189,8 @@ bool ZSTDSeek_jumpTableIsInitialized(const ZSTDSeek_Context *sctx);
  *
  * @param file  Path to a zstd-compressed file.
  * @return A new context on success, or @c NULL if the file cannot be
- *         opened, cannot be memory-mapped, or does not start with a valid
- *         zstd frame.
+ *         opened, cannot be memory-mapped, does not start with a valid
+ *         zstd frame, or jump table initialization fails.
  */
 ZSTDSeek_Context* ZSTDSeek_createFromFile(const char* file);
 
@@ -198,9 +202,9 @@ ZSTDSeek_Context* ZSTDSeek_createFromFile(const char* file);
  * jump table with ZSTDSeek_addJumpTableRecord().
  *
  * @param file  Path to a zstd-compressed file.
- * @return A new context on success, or @c NULL if the file cannot be
- *         opened, cannot be memory-mapped, or does not start with a valid
- *         zstd frame.
+ * @return A new context on success, or @c NULL if @p file is @c NULL,
+ *         cannot be opened, cannot be memory-mapped, or does not start
+ *         with a valid zstd frame.
  */
 ZSTDSeek_Context* ZSTDSeek_createFromFileWithoutJumpTable(const char* file);
 
@@ -232,8 +236,9 @@ ZSTDSeek_Context* ZSTDSeek_create(void *buff, size_t size);
  *
  * @param buff  Pointer to the complete zstd-compressed data.
  * @param size  Size of @p buff in bytes.
- * @return A new context on success, or @c NULL if @p buff does not start
- *         with a valid zstd frame.
+ * @return A new context on success, or @c NULL if @p buff is @c NULL
+ *         (with non-zero @p size), does not start with a valid zstd
+ *         frame, or memory allocation fails.
  */
 ZSTDSeek_Context* ZSTDSeek_createWithoutJumpTable(void *buff, size_t size);
 
@@ -290,8 +295,11 @@ ZSTDSeek_Context* ZSTDSeek_createFromFileDescriptor(int32_t fd);
  *       semantics.  The error (@ref ZSTDSEEK_ERR_READ) will be
  *       reported on the *next* call, when no data can be delivered.
  *
- * @param outBuff     Destination buffer (must be at least @p outBuffSize bytes).
- * @param outBuffSize Maximum number of bytes to read.
+ * @param outBuff     Destination buffer (must be at least @p outBuffSize
+ *                    bytes).  Passing @c NULL with non-zero @p outBuffSize
+ *                    returns @ref ZSTDSEEK_ERR_READ.
+ * @param outBuffSize Maximum number of bytes to read.  If zero, the
+ *                    function returns 0 immediately without decompressing.
  * @param sctx        Context to read from.
  * @return Number of bytes actually read (0 at EOF), or
  *         @ref ZSTDSEEK_ERR_READ on decompression failure or unreadable data.
@@ -316,7 +324,8 @@ int64_t ZSTDSeek_read(void *outBuff, size_t outBuffSize, ZSTDSeek_Context *sctx)
  * @return 0 on success,
  *         @ref ZSTDSEEK_ERR_NEGATIVE_SEEK if the resolved position is negative,
  *         @ref ZSTDSEEK_ERR_BEYOND_END_SEEK if the resolved position exceeds
- *         the uncompressed file size,
+ *         the uncompressed file size (this includes arithmetic overflow
+ *         for @c SEEK_CUR / @c SEEK_END),
  *         @ref ZSTDSEEK_ERR_READ if a forward skip fails due to a
  *         decompression or stream error,
  *         or -1 for any other error (e.g. @c NULL context, invalid origin).
