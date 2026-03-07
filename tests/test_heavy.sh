@@ -68,15 +68,17 @@ generate_text() {
 generate_binary() {
     local size=$1
     log_step "Generating ${size} bytes of random binary"
-    dd if=/dev/urandom bs=1048576 count=$((size / 1048576 + 1)) 2>/dev/null \
-        | head -c "$size" > "$RAW_FILE"
+    dd if=/dev/urandom bs=1048576 count=$((size / 1048576 + 1)) of="$WORK_DIR/tmp_bin" 2>/dev/null
+    head -c "$size" "$WORK_DIR/tmp_bin" > "$RAW_FILE"
+    rm -f "$WORK_DIR/tmp_bin"
 }
 
 generate_zeros() {
     local size=$1
     log_step "Generating ${size} bytes of zeros"
-    dd if=/dev/zero bs=1048576 count=$((size / 1048576 + 1)) 2>/dev/null \
-        | head -c "$size" > "$RAW_FILE"
+    dd if=/dev/zero bs=1048576 count=$((size / 1048576 + 1)) of="$WORK_DIR/tmp_zero" 2>/dev/null
+    head -c "$size" "$WORK_DIR/tmp_zero" > "$RAW_FILE"
+    rm -f "$WORK_DIR/tmp_zero"
 }
 
 generate_repetitive() {
@@ -97,8 +99,9 @@ generate_mixed() {
     generate_text "$third"
     cp "$RAW_FILE" "$WORK_DIR/mix_part"
     # 1/3 binary
-    dd if=/dev/urandom bs=1048576 count=$((third / 1048576 + 1)) 2>/dev/null \
-        | head -c "$third" >> "$WORK_DIR/mix_part"
+    dd if=/dev/urandom bs=1048576 count=$((third / 1048576 + 1)) of="$WORK_DIR/tmp_bin" 2>/dev/null
+    head -c "$third" "$WORK_DIR/tmp_bin" >> "$WORK_DIR/mix_part"
+    rm -f "$WORK_DIR/tmp_bin"
     # 1/3 repetitive pattern
     generate_repetitive "$rest" "$WORK_DIR/tmp_rep_chunk"
     cat "$WORK_DIR/tmp_rep_chunk" >> "$WORK_DIR/mix_part"
