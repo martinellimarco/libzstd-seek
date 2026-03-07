@@ -27,11 +27,12 @@ the harnesses simple and leak-free.
 
 ## Prerequisites
 
-| Dependency    | Required                            | Install                                                      |
-|---------------|-------------------------------------|--------------------------------------------------------------|
-| Clang         | yes (libFuzzer is built into clang) | macOS: `brew install llvm`; Linux: `apt install clang`       |
-| libzstd-dev   | yes                                 | macOS: `brew install zstd`; Linux: `apt install libzstd-dev` |
-| cmake >= 3.16 | yes                                 | macOS: `brew install cmake`; Linux: `apt install cmake`      |
+| Dependency    | Required                                     | Install                                                      |
+|---------------|----------------------------------------------|--------------------------------------------------------------|
+| Clang         | yes (libFuzzer is built into clang)          | macOS: `brew install llvm`; Linux: `apt install clang`       |
+| libzstd-dev   | yes                                          | macOS: `brew install zstd`; Linux: `apt install libzstd-dev` |
+| zstd (CLI)    | only for corpus generation (`gen_corpus.sh`) | macOS: `brew install zstd`; Linux: `apt install zstd`        |
+| cmake >= 3.16 | yes                                          | macOS: `brew install cmake`; Linux: `apt install cmake`      |
 
 > **macOS note**: AppleClang (shipped with Xcode) does **not** include the
 > libFuzzer runtime. You must use Homebrew LLVM clang instead. Homebrew may
