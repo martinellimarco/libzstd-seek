@@ -45,12 +45,15 @@ add_fuzz_target(fuzz_seekable)
 add_fuzz_target(fuzz_jumptable)
 
 # ── Seed corpus generation ───────────────────────────────────────────────────
+find_program(ZSTD_CLI zstd REQUIRED)
+
 set(CORPUS_DECOMPRESS  ${CMAKE_CURRENT_BINARY_DIR}/corpus_decompress)
 set(CORPUS_SEEKABLE    ${CMAKE_CURRENT_BINARY_DIR}/corpus_seekable)
 set(CORPUS_JUMPTABLE   ${CMAKE_CURRENT_BINARY_DIR}/corpus_jumptable)
 
 add_custom_target(fuzz_corpus
-    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/gen_corpus.sh
+    COMMAND ${CMAKE_COMMAND} -E env "ZSTD=${ZSTD_CLI}"
+            bash ${CMAKE_CURRENT_SOURCE_DIR}/gen_corpus.sh
             ${CORPUS_DECOMPRESS} ${CORPUS_SEEKABLE} ${CORPUS_JUMPTABLE}
     COMMENT "Generating fuzz seed corpus in ${CMAKE_CURRENT_BINARY_DIR}"
 )

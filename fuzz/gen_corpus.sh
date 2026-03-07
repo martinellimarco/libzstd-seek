@@ -7,6 +7,8 @@
 
 set -euo pipefail
 
+ZSTD="${ZSTD:-zstd}"
+
 CORPUS_DECOMPRESS="${1:?Usage: $0 <corpus_decompress> <corpus_seekable> <corpus_jumptable>}"
 CORPUS_SEEKABLE="${2:?Usage: $0 <corpus_decompress> <corpus_seekable> <corpus_jumptable>}"
 CORPUS_JUMPTABLE="${3:?Usage: $0 <corpus_decompress> <corpus_seekable> <corpus_jumptable>}"
@@ -17,7 +19,7 @@ mkdir -p "$CORPUS_DECOMPRESS" "$CORPUS_SEEKABLE" "$CORPUS_JUMPTABLE"
 make_zst() {
     local content="$1"
     local output="$2"
-    printf '%s' "$content" | zstd -1 --no-check -o "$output" 2>/dev/null
+    printf '%s' "$content" | "$ZSTD" -f -1 --no-check -o "$output" 2>/dev/null
 }
 
 # ── Helper: create a multi-frame zstd file ───────────────────────────────────
@@ -26,7 +28,7 @@ make_multiframe_zst() {
     shift
     > "$output"
     for content in "$@"; do
-        printf '%s' "$content" | zstd -1 --no-check >> "$output" 2>/dev/null
+        printf '%s' "$content" | "$ZSTD" -f -1 --no-check >> "$output" 2>/dev/null
     done
 }
 
@@ -64,7 +66,7 @@ make_multiframe_zst "$CORPUS_DECOMPRESS/multi_vary.zst" \
     "A" "BB" "CCC" "DDDD" "EEEEE" "FFFFFF" "GGGGGGG" "HHHHHHHH"
 
 # Single frame without content-size (--no-check already omits checksum)
-printf '%0256d' 0 | zstd -1 --no-check --no-content-size -o "$CORPUS_DECOMPRESS/no_content_size.zst" 2>/dev/null || true
+printf '%0256d' 0 | "$ZSTD" -f -1 --no-check --no-content-size -o "$CORPUS_DECOMPRESS/no_content_size.zst" 2>/dev/null || true
 
 # Empty-ish: just the zstd magic (invalid but interesting for parser)
 printf '\x28\xb5\x2f\xfd' > "$CORPUS_DECOMPRESS/magic_only.bin"
