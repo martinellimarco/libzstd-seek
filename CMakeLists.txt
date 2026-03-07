@@ -63,7 +63,7 @@ endif()
 # --- Library ---
 add_library(zstd-seek zstd-seek.c zstd-seek.h mman_compat.h)
 target_include_directories(zstd-seek PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${ZSTD_INC})
-target_link_libraries(zstd-seek ${ZSTD_LIB} m)
+target_link_libraries(zstd-seek ${ZSTD_LIB})
 
 if(DEBUG_LOG)
     target_compile_definitions(zstd-seek PRIVATE ZSTD_SEEK_DEBUG=1)
