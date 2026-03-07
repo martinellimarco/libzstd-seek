@@ -479,6 +479,10 @@ ZSTDSeek_JumpCoordinate ZSTDSeek_getJumpCoordinate(ZSTDSeek_Context *sctx, const
 /* Seek API */
 
 ZSTDSeek_Context* ZSTDSeek_createFromFileWithoutJumpTable(const char* file){
+    if(!file){
+        DEBUG("File path is NULL\n");
+        return NULL;
+    }
     const int32_t fd = ZSTDSeek_open(file, O_RDONLY);
     if(fd < 0){
         DEBUG("Unable to open '%s'\n", file);
@@ -668,6 +672,7 @@ int64_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context 
         }
     }
 
+    int frameError = 0;
     while(toRead > 0){
         if(sctx->input.pos >= sctx->input.size){
             /* Compute remaining bytes from inBuff to end of buffer */
@@ -679,6 +684,8 @@ int64_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context 
             sctx->lastFrameCompressedSize = ZSTD_findFrameCompressedSize(sctx->inBuff, remaining);
             if(ZSTD_isError(sctx->lastFrameCompressedSize) || sctx->lastFrameCompressedSize == 0
                || sctx->lastFrameCompressedSize > remaining){
+                DEBUG("Frame size detection failed (remaining=%zu)\n", remaining);
+                frameError = 1;
                 break;
             }
 
@@ -742,6 +749,15 @@ int64_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context 
     /* Compute currentCompressedPos from absolute pointers so it stays
      * consistent regardless of which code path was taken above. */
     sctx->currentCompressedPos = (size_t)((uint8_t *)sctx->inBuff - (uint8_t *)sctx->buff) + sctx->input.pos;
+
+    /* If we broke out of the loop due to a frame detection error and no
+     * data was delivered, report an explicit error instead of mimicking
+     * EOF (return 0).  When some data was already copied we return the
+     * short read; the next call will hit the same corrupt frame with
+     * toRead == shouldRead and return the error then. */
+    if(frameError && toRead == shouldRead){
+        return ZSTDSEEK_ERR_READ;
+    }
 
     return shouldRead - toRead;
 }
