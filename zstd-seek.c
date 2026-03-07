@@ -717,9 +717,8 @@ int64_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context 
 
             if(ZSTD_isError(ret)){
                 DEBUG("Error decompressing: %s\n", ZSTD_getErrorName(ret));
-                sctx->currentCompressedPos =
-                    (size_t)((uint8_t *)sctx->inBuff - (uint8_t *)sctx->buff) + sctx->input.pos;
-                return ZSTDSEEK_ERR_READ;
+                frameError = 1;
+                break;
             }
 
             {
@@ -745,6 +744,10 @@ int64_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context 
             }
         }
 
+        if(frameError){
+            break;
+        }
+
         if(sctx->input.pos == sctx->input.size){ //end of frame
             sctx->inBuff+=sctx->lastFrameCompressedSize;
             sctx->input = (ZSTD_inBuffer){sctx->inBuff, 0, 0};
@@ -759,11 +762,12 @@ int64_t ZSTDSeek_read(void *outBuff, const size_t outBuffSize, ZSTDSeek_Context 
      * consistent regardless of which code path was taken above. */
     sctx->currentCompressedPos = (size_t)((uint8_t *)sctx->inBuff - (uint8_t *)sctx->buff) + sctx->input.pos;
 
-    /* If we broke out of the loop due to a frame detection error and no
-     * data was delivered, report an explicit error instead of mimicking
-     * EOF (return 0).  When some data was already copied we return the
-     * short read; the next call will hit the same corrupt frame with
-     * toRead == shouldRead and return the error then. */
+    /* If we broke out of the loop due to a frame error (detection failure
+     * or decompression error) and no data was delivered, report an explicit
+     * error instead of mimicking EOF (return 0).  When some data was
+     * already copied we return the short read; the next call will hit the
+     * same corrupt frame with toRead == shouldRead and return the error
+     * then — consistent with fread() semantics. */
     if(frameError && toRead == shouldRead){
         return ZSTDSEEK_ERR_READ;
     }
