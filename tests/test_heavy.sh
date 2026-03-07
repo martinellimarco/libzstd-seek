@@ -68,13 +68,15 @@ generate_text() {
 generate_binary() {
     local size=$1
     log_step "Generating ${size} bytes of random binary"
-    dd if=/dev/urandom of="$RAW_FILE" bs=1048576 count=$((size / 1048576)) 2>/dev/null
+    dd if=/dev/urandom bs=1048576 count=$((size / 1048576 + 1)) 2>/dev/null \
+        | head -c "$size" > "$RAW_FILE"
 }
 
 generate_zeros() {
     local size=$1
     log_step "Generating ${size} bytes of zeros"
-    dd if=/dev/zero of="$RAW_FILE" bs=1048576 count=$((size / 1048576)) 2>/dev/null
+    dd if=/dev/zero bs=1048576 count=$((size / 1048576 + 1)) 2>/dev/null \
+        | head -c "$size" > "$RAW_FILE"
 }
 
 generate_repetitive() {
