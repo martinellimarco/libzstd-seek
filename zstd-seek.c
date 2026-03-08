@@ -11,6 +11,10 @@
  * the LICENSE file) and the GPLv3 (found in the COPYING file).
 ****************************************************************** */
 
+#ifdef _MSC_VER
+#define _CRT_SECURE_NO_WARNINGS   /* silence C4996 for _open / _close */
+#endif
+
 #include <fcntl.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -834,13 +838,13 @@ int32_t ZSTDSeek_seek(ZSTDSeek_Context *sctx, int64_t offset, int32_t origin){
             }
         }
 
-        if(offset == sctx->currentUncompressedPos){ //we are already there, do nothing
+        if(offset == (int64_t)sctx->currentUncompressedPos){ //we are already there, do nothing
             return 0;
         }
 
         const ZSTDSeek_JumpCoordinate new_jc = ZSTDSeek_getJumpCoordinate(sctx, (size_t)offset);
 
-        if(sctx->jc.compressedOffset != new_jc.compressedOffset || offset < sctx->currentUncompressedPos){ //reset
+        if(sctx->jc.compressedOffset != new_jc.compressedOffset || offset < (int64_t)sctx->currentUncompressedPos){ //reset
             ZSTD_DCtx_reset(sctx->dctx, ZSTD_reset_session_only);
 
             sctx->jc = new_jc;
