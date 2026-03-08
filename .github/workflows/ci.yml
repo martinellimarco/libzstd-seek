@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, dev]
+
+jobs:
+  # ── Build + test on Linux and macOS ────────────────────────────────────────
+  unix:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: Linux
+            install: sudo apt-get update && sudo apt-get install -y cmake libzstd-dev zstd
+          - os: macos-latest
+            name: macOS
+            install: brew install zstd
+
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.name }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install zstd
+        run: ${{ matrix.install }}
+
+      - name: Configure
+        run: cmake -B build -DBUILD_TESTS=ON -DBUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test (exclude heavy)
+        working-directory: build
+        run: ctest --output-on-failure -LE heavy
+
+  # ── Build + test on Windows (MSYS2 / MinGW-w64) ───────────────────────────
+  windows:
+    runs-on: windows-latest
+    name: Windows
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: false
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-zstd
+            coreutils
+            diffutils
+
+      - name: Configure
+        run: cmake -B build -G Ninja -DBUILD_TESTS=ON -DBUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test (exclude heavy)
+        working-directory: build
+        run: ctest --output-on-failure -LE heavy
+
+  # ── Sanitizers (Linux only — ASAN + UBSan) ─────────────────────────────────
+  sanitize:
+    runs-on: ubuntu-latest
+    name: ASAN + UBSan
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake libzstd-dev zstd
+
+      - name: Configure
+        run: cmake -B build -DBUILD_TESTS=ON -DBUILD_EXAMPLES=OFF -DSANITIZE=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test (exclude heavy)
+        working-directory: build
+        run: ctest --output-on-failure -LE heavy

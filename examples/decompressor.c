@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later OR MIT
 /* ******************************************************************
  * libzstd-seek
  * Copyright (c) 2020, Martinelli Marco
@@ -13,6 +14,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 #include "../zstd-seek.h"
@@ -23,10 +25,11 @@ static char* createOutFilename(const char* filename){
     size_t const inL = strlen(filename);
     size_t const outL = inL - 4;
     char* const outSpace = (char*)malloc(outL+1);
+    if(!outSpace) return NULL;
     memset(outSpace, 0, outL);
     strncat(outSpace, filename, outL);
     outSpace[outL] = 0;
-    return (char*)outSpace;
+    return outSpace;
 }
 
 int main(int argc, const char** argv) {
@@ -43,16 +46,23 @@ int main(int argc, const char** argv) {
     }
 
     const char* outFileName = createOutFilename(argv[1]);
+    if(!outFileName){
+        fprintf(stderr, "Can't allocate output filename\n");
+        ZSTDSeek_free(sctx);
+        return -1;
+    }
     FILE* outF = fopen(outFileName, "wb");
     if(!outF){
         fprintf(stderr, "Can't open out file %s\n", outFileName);
+        free((void*)outFileName);
+        ZSTDSeek_free(sctx);
         return -1;
     }
     printf("Decompressing to %s\n", outFileName);
     free((void*)outFileName);
 
-    uint8_t *buff[BUFFSIZE];
-    size_t len;
+    uint8_t buff[BUFFSIZE];
+    int64_t len;
     size_t total=0;
     int i=0;
     while((len = ZSTDSeek_read(buff, BUFFSIZE, sctx))>0){
@@ -60,8 +70,16 @@ int main(int argc, const char** argv) {
         if((i++)%10==0){
             printf("\rWrote %.2f MiB", total / 1024.f / 1024.f);
         }
-        fwrite(buff, len, 1, outF);
+        fwrite(buff, (size_t)len, 1, outF);
     }
+
+    if(len < 0){
+        fprintf(stderr, "\nError while decompressing (code: %" PRId64 ")\n", len);
+        fclose(outF);
+        ZSTDSeek_free(sctx);
+        return 1;
+    }
+
     printf("\rWrote %.2f MiB\n", total / 1024.f / 1024.f);
 
     fclose(outF);

@@ -1,0 +1,5 @@
+.idea
+cmake-build-*
+build/
+build_*
+tests/coverage

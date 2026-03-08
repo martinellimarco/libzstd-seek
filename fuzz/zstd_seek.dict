@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# libFuzzer dictionary for libzstd-seek
+#
+# Contains magic numbers, format constants, and common values that help
+# libFuzzer generate structurally valid inputs faster.
+#
+# Usage:
+#   ./fuzz_decompress corpus/ -dict=../fuzz/zstd_seek.dict
+#   ./fuzz_seekable   corpus/ -dict=../fuzz/zstd_seek.dict
+
+# ── ZSTD frame magic (LE32: 0xFD2FB528) ──────────────────────────────────────
+zstd_magic="\x28\xb5\x2f\xfd"
+
+# ── ZSTD skippable frame magic range: 0x184D2A50 .. 0x184D2A5F ──────────────
+skip_magic_0="\x50\x2a\x4d\x18"
+skip_magic_e="\x5e\x2a\x4d\x18"
+skip_magic_f="\x5f\x2a\x4d\x18"
+
+# ── ZSTD seekable format magic (LE32: 0x8F92EAB1) ────────────────────────────
+seekable_magic="\xb1\xea\x92\x8f"
+
+# ── Seekable format SFD byte variants ────────────────────────────────────────
+sfd_no_checksum="\x00"
+sfd_checksum="\x80"
+sfd_reserved_bits="\x7c"
+sfd_all_bits="\xfc"
+
+# ── Common sizes (LE32) ──────────────────────────────────────────────────────
+size_0="\x00\x00\x00\x00"
+size_1="\x01\x00\x00\x00"
+size_4="\x04\x00\x00\x00"
+size_5="\x05\x00\x00\x00"
+size_8="\x08\x00\x00\x00"
+size_9="\x09\x00\x00\x00"
+size_14="\x0e\x00\x00\x00"
+size_17="\x11\x00\x00\x00"
+size_100="\x64\x00\x00\x00"
+size_1024="\x00\x04\x00\x00"
+size_max="\xff\xff\xff\xff"
+
+# ── ZSTD frame header byte patterns ──────────────────────────────────────────
+# Frame header descriptor: FHD byte after magic
+fhd_minimal="\x00"
+fhd_single_seg="\x20"
+fhd_with_checksum="\x04"
+fhd_with_dictid="\x01"
+
+# ── Common decompressed content sizes (for seekable entries) ─────────────────
+decomp_5="\x05\x00\x00\x00"
+decomp_256="\x00\x01\x00\x00"
+decomp_1024="\x00\x04\x00\x00"
+decomp_4096="\x00\x10\x00\x00"
+
+# ── Seek whence values (used as raw bytes in fuzz_decompress) ────────────────
+seek_set="\x00"
+seek_cur="\x01"
+seek_end="\x02"

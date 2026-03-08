@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later OR MIT
 /* ******************************************************************
  * libzstd-seek
  * Copyright (c) 2020, Martinelli Marco
@@ -13,6 +14,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <math.h>
 #include <stdlib.h>
 #include "../zstd-seek.h"
@@ -22,7 +24,7 @@ void printJumpTable(ZSTDSeek_JumpTable *jt){
     printf("Frame\tCompressed\tUncompressed\n");
     for(uint32_t i = 0; i < jt->length; i++){
         ZSTDSeek_JumpTableRecord r = jt->records[i];
-        printf("%5d\t%10lu\t%12lu\t\n", i, r.compressedPos, r.uncompressedPos);
+        printf("%5d\t%10zu\t%12zu\t\n", i, r.compressedPos, r.uncompressedPos);
     }
     printf("******************\n");
 }
@@ -40,7 +42,7 @@ void listFileInTar(ZSTDSeek_Context *sctx){
     tar_header header;
     size_t outBuffSize = sizeof(tar_header);
 
-    size_t ret;
+    int64_t ret;
     size_t offset = 0;
     do{
         if(ZSTDSeek_seek(sctx, offset, SEEK_SET)!=0){
@@ -57,11 +59,11 @@ void listFileInTar(ZSTDSeek_Context *sctx){
             break;
         }
         header.name[99]=0;//just in case readFromPos returned garbage
-        printf("%s - ftell: %ld\n", header.name, ZSTDSeek_tell(sctx));
+        printf("%s - ftell: %" PRId64 "\n", header.name, ZSTDSeek_tell(sctx));
 
         size_t blockSize = strtoul(header.size, NULL, 8);
         offset += (size_t)((ceil((float)blockSize/512.0)+1)*512);//align to 512 and add the header length
-    }while(ret==outBuffSize);
+    }while(ret==(int64_t)outBuffSize);
 }
 
 int main(int argc, const char** argv) {
@@ -80,6 +82,7 @@ int main(int argc, const char** argv) {
     ZSTDSeek_JumpTable *jt = ZSTDSeek_getJumpTableOfContext(sctx);
     if(!jt){
         fprintf(stderr, "Can't get the jump table from the context\n");
+        ZSTDSeek_free(sctx);
         return -1;
     }
     printJumpTable(jt);
