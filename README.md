@@ -1,4 +1,5 @@
 [![AUR version](https://img.shields.io/aur/version/libzstd-seek)](https://aur.archlinux.org/packages/libzstd-seek/)
+[![Build Status](https://github.com/martinellimarco/libzstd-seek/workflows/tests/badge.svg)](https://github.com/martinellimarco/libzstd-seek/actions)
 
 # libzstd-seek
 
