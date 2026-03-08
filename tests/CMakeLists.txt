@@ -5,7 +5,7 @@ set(CMAKE_C_STANDARD 99)
 # ── gen_seekable: deterministic multi-frame zstd generator ───────────────────
 add_executable(gen_seekable gen_seekable.c)
 target_include_directories(gen_seekable PRIVATE ${ZSTD_INC})
-target_link_libraries(gen_seekable ${ZSTD_LIB} m)
+target_link_libraries(gen_seekable ${ZSTD_LIB} ${LIBM})
 
 # ── test_seek: C test driver with dispatch by name ───────────────────────────
 add_executable(test_seek test_seek.c)

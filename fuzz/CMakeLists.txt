@@ -35,7 +35,7 @@ function(add_fuzz_target name)
         ${FUZZ_SANITIZE_FLAGS}
         ${FUZZ_EXTRA_LINK_FLAGS}
     )
-    target_link_libraries(${name} zstd-seek ${ZSTD_LIB} m)
+    target_link_libraries(${name} zstd-seek ${ZSTD_LIB} ${LIBM})
     target_include_directories(${name} PRIVATE ${ZSTD_INC})
 endfunction()
 

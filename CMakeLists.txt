@@ -60,6 +60,13 @@ if(NOT ZSTD_LIB OR NOT ZSTD_INC)
         "  Arch:          pacman -S zstd\n")
 endif()
 
+# --- Math library (libm) ---
+# On Unix, math functions (log2, ceil, etc.) require linking -lm.
+# On MSVC, they are part of the CRT — no separate library is needed.
+if(NOT MSVC)
+    set(LIBM m)
+endif()
+
 # --- Library ---
 add_library(zstd-seek zstd-seek.c zstd-seek.h mman_compat.h)
 target_include_directories(zstd-seek PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${ZSTD_INC})
