@@ -1,5 +1,5 @@
 [![AUR version](https://img.shields.io/aur/version/libzstd-seek)](https://aur.archlinux.org/packages/libzstd-seek/)
-[![Build Status](https://github.com/martinellimarco/libzstd-seek/actions/workflows/ci.yml/badge.svgg)](https://github.com/martinellimarco/libzstd-seek/actions)
+[![Build Status](https://github.com/martinellimarco/libzstd-seek/actions/workflows/ci.yml/badge.svg)](https://github.com/martinellimarco/libzstd-seek/actions)
 
 # libzstd-seek
 
